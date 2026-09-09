@@ -4,6 +4,7 @@
   var DEFAULT_ENDPOINT = "https://neo-stratus-api-w6nw.onrender.com";
   var LEGACY_ENDPOINT = "https://api.stratus.lol";
   var DEFAULT_API_KEY = "sk_live_neo_21c3aa84317445fa850319adfa895999";
+  var SERVICE_WAKE_TIMEOUT = 75000;
   var PAGE_SIZE = 24;
   var STORAGE = {
     favorites: "neo_cloud_favorites_v1",
@@ -544,7 +545,10 @@
     elements.testConnection.innerHTML = icon("refresh") + " Testing";
     setConnectionResult("Contacting the service...", false);
     var controller = new AbortController();
-    var timer = window.setTimeout(function () { controller.abort(); }, 12000);
+    var wakingTimer = window.setTimeout(function () {
+      setConnectionResult("The cloud server is waking up. Keep this window open…", false);
+    }, 4500);
+    var timer = window.setTimeout(function () { controller.abort(); }, SERVICE_WAKE_TIMEOUT);
     try {
       var response = await fetch(settings.endpoint + "/cloud/v1/getQueue?uuid=00000000-0000-4000-8000-000000000000", {
         method: "GET",
@@ -572,12 +576,13 @@
     } catch (error) {
       state.testedConfig = "";
       var message = error && error.name === "AbortError"
-        ? "The service did not answer in time."
+        ? "The service did not answer after its wake-up period. Try again in a moment."
         : "Could not reach the service. Check the endpoint and its CORS settings.";
       if (error && /rejected this API key|returned an error|not a compatible/i.test(error.message)) message = error.message;
       setConnectionResult(message, true);
       return false;
     } finally {
+      window.clearTimeout(wakingTimer);
       window.clearTimeout(timer);
       elements.testConnection.disabled = false;
       elements.testConnection.innerHTML = icon("signal") + " Test connection";
