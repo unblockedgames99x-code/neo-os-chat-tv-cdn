@@ -1,14 +1,14 @@
 (function () {
   "use strict";
 
-  var DEFAULT_ENDPOINT = "https://api.stratus.lol";
+  var DEFAULT_ENDPOINT = "https://neo-stratus-api-w6nw.onrender.com";
+  var LEGACY_ENDPOINT = "https://api.stratus.lol";
+  var DEFAULT_API_KEY = "sk_live_neo_21c3aa84317445fa850319adfa895999";
   var PAGE_SIZE = 24;
   var STORAGE = {
     favorites: "neo_cloud_favorites_v1",
     recent: "neo_cloud_recent_v1",
-    endpoint: "neo_cloud_endpoint_v1",
-    key: "neo_cloud_api_key_v1",
-    remember: "neo_cloud_remember_key_v1"
+    endpoint: "neo_cloud_endpoint_v1"
   };
 
   var elements = {
@@ -44,11 +44,8 @@
     settingsDialog: document.querySelector("[data-settings-dialog]"),
     settingsForm: document.querySelector("[data-settings-form]"),
     endpoint: document.querySelector("[data-endpoint]"),
-    apiKey: document.querySelector("[data-api-key]"),
-    rememberKey: document.querySelector("[data-remember-key]"),
     connectionResult: document.querySelector("[data-connection-result]"),
     testConnection: document.querySelector("[data-test-connection]"),
-    toggleKey: document.querySelector("[data-toggle-key]"),
     stage: document.querySelector("[data-stream-stage]"),
     video: document.querySelector("[data-stream-video]"),
     placeholder: document.querySelector("[data-stream-placeholder]"),
@@ -146,14 +143,12 @@
   }
 
   function serviceSettings() {
-    var remember = safeStorageGet(localStorage, STORAGE.remember) === "1";
-    var savedKey = remember
-      ? safeStorageGet(localStorage, STORAGE.key)
-      : safeStorageGet(sessionStorage, STORAGE.key);
+    var savedEndpoint = safeStorageGet(localStorage, STORAGE.endpoint);
     return {
-      endpoint: safeStorageGet(localStorage, STORAGE.endpoint) || DEFAULT_ENDPOINT,
-      key: savedKey,
-      remember: remember
+      endpoint: !savedEndpoint || normalizeEndpoint(savedEndpoint) === LEGACY_ENDPOINT
+        ? DEFAULT_ENDPOINT
+        : savedEndpoint,
+      key: DEFAULT_API_KEY
     };
   }
 
@@ -177,8 +172,8 @@
         ? "Cloud service could not connect"
         : "Connect a cloud service to play";
       elements.serviceNotice.querySelector("span").textContent = mode === "error"
-        ? "Open setup to check the endpoint and API key."
-        : "The game library works now. Streaming needs a compatible endpoint and your own API key.";
+        ? "Open setup to check the service endpoint."
+        : "The game library works now. Streaming needs a compatible Stratus endpoint.";
     }
   }
 
@@ -513,18 +508,13 @@
   function openSettings(message) {
     var settings = serviceSettings();
     elements.endpoint.value = settings.endpoint;
-    elements.apiKey.value = settings.key;
-    elements.rememberKey.checked = settings.remember;
-    elements.apiKey.type = "password";
     setConnectionResult(message || "", false);
     showDialog(elements.settingsDialog);
   }
 
   function settingsFromForm() {
     var endpoint = normalizeEndpoint(elements.endpoint.value);
-    var key = String(elements.apiKey.value || "").trim();
-    var remember = elements.rememberKey.checked;
-    return { endpoint: endpoint, key: key, remember: remember };
+    return { endpoint: endpoint, key: DEFAULT_API_KEY };
   }
 
   function settingsFingerprint(settings) {
@@ -535,11 +525,7 @@
     var settings = settingsFromForm();
     var endpoint = settings.endpoint;
     var key = settings.key;
-    var remember = settings.remember;
     safeStorageSet(localStorage, STORAGE.endpoint, endpoint);
-    safeStorageSet(localStorage, STORAGE.remember, remember ? "1" : "0");
-    safeStorageSet(localStorage, STORAGE.key, remember ? key : "");
-    safeStorageSet(sessionStorage, STORAGE.key, remember ? "" : key);
     state.tested = state.testedConfig === settingsFingerprint(settings);
     updateServiceStatus(key ? "ready" : "idle", key ? (state.tested ? "Connected" : "Configured") : "Setup needed");
     return settings;
@@ -549,7 +535,6 @@
     var settings;
     try {
       settings = settingsFromForm();
-      if (!settings.key) throw new Error("Enter an API key before testing.");
     } catch (error) {
       setConnectionResult(error.message, true);
       return false;
@@ -1100,7 +1085,7 @@
     var settings = serviceSettings();
     if (!settings.key) {
       state.pendingLaunch = game;
-      openSettings("Add your endpoint and API key to start " + game.name + ".");
+      openSettings("Add your Stratus server endpoint to start " + game.name + ".");
       return;
     }
     closeDialog(elements.detailsDialog);
@@ -1291,16 +1276,11 @@
     elements.detailsDialog.addEventListener("click", function (event) { if (event.target === elements.detailsDialog) closeDialog(elements.detailsDialog); });
     elements.settingsDialog.addEventListener("click", function (event) { if (event.target === elements.settingsDialog) cancelSettings(); });
     elements.settingsDialog.addEventListener("cancel", function () { state.pendingLaunch = null; });
-    elements.toggleKey.addEventListener("click", function () {
-      elements.apiKey.type = elements.apiKey.type === "password" ? "text" : "password";
-      elements.toggleKey.setAttribute("aria-label", elements.apiKey.type === "password" ? "Show API key" : "Hide API key");
-    });
     elements.testConnection.addEventListener("click", testConnection);
     elements.settingsForm.addEventListener("submit", function (event) {
       event.preventDefault();
       try {
         var settings = saveSettings();
-        if (!settings.key) throw new Error("Enter an API key to enable cloud play.");
         closeDialog(elements.settingsDialog);
         showToast("Connection saved", state.tested ? "NEO Cloud is ready to launch." : "NEO Cloud will test it when a game launches.");
         var pending = state.pendingLaunch;

@@ -1,7 +1,7 @@
 # NEO Cloud third-party notices
 
-NEO Cloud uses the game catalog from the [Stratus API project](https://github.com/x8rr/stratus-api), retrieved from commit `bd760513ce7616e955181dfd18017e2a6c278e3c`.
+NEO Cloud uses the game catalog from the [Stratus API project](https://github.com/x8rr/stratus-api). The bundled catalog was verified byte-for-byte against commit `30bccaae33025f1874e8802f2923a34da974ab76`.
 
-The Stratus API project is licensed under the GNU Affero General Public License, version 3. A copy is included in `LICENSE.stratus.txt`.
+The Stratus API project is distributed under the Stratus Public License. A copy is included in `LICENSE.stratus.txt`. Its required public notice appears in the NEO Cloud footer.
 
-NEO Cloud is an independently implemented client. It does not bundle the Stratus server, an API key, user accounts, or the upstream cloud-gaming service. Game names, descriptions, and artwork remain the property of their respective owners. Access to a compatible service must be authorized by its operator.
+NEO Cloud is an independently implemented client. NEO hosts a separately deployed copy of the Stratus server with browser CORS, hosted-port, health-check, and bounded-rate configuration. The service source and upstream license are included in this repository under `stratus-api-service/`. Game names, descriptions, and artwork remain the property of their respective owners. Access to the upstream cloud-gaming service must be authorized by its operator.

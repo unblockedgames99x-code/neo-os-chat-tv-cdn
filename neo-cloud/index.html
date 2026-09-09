@@ -104,7 +104,7 @@
 
           <div class="service-notice" data-service-notice>
             <svg class="icon" aria-hidden="true"><use href="#cloud-icon-info"></use></svg>
-            <div><strong>Connect a cloud service to play</strong><span>The game library works now. Streaming needs a compatible endpoint and your own API key.</span></div>
+            <div><strong>NEO Cloud is ready</strong><span>The game service is configured automatically. The first launch may take a moment while it wakes.</span></div>
             <button type="button" class="text-button" data-open-settings>Set up</button>
           </div>
 
@@ -120,7 +120,7 @@
 
       <footer class="footer">
         <span>NEO Cloud</span>
-        <span>Local catalog · Configurable streaming</span>
+        <span>This website uses Stratus API to provide some of its services</span>
         <a href="./THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Source notices</a>
       </footer>
     </div>
@@ -137,7 +137,7 @@
           <button class="button button-primary" type="button" data-details-play><svg class="icon" aria-hidden="true"><use href="#cloud-icon-play"></use></svg> Start session</button>
           <button class="button button-secondary favorite-action" type="button" data-details-favorite><svg class="icon" aria-hidden="true"><use href="#cloud-icon-heart"></use></svg><span>Add favorite</span></button>
         </div>
-        <p class="details-footnote">Requires a working Stratus-compatible service. NEO Cloud never includes an API key in the site files.</p>
+        <p class="details-footnote">Uses NEO's hosted Stratus-compatible service. The access key is configured automatically.</p>
       </div>
     </dialog>
 
@@ -147,10 +147,8 @@
           <div><p class="eyebrow">CONNECTION</p><h2 id="cloud-settings-title">Cloud service</h2></div>
           <button class="dialog-close" type="button" data-close-settings aria-label="Close settings"><svg class="icon" aria-hidden="true"><use href="#cloud-icon-close"></use></svg></button>
         </header>
-        <p class="dialog-copy">Use a service you are authorized to access. The default address comes from the Stratus project, but it may be unavailable.</p>
+        <p class="dialog-copy">NEO's Stratus service and access key are configured automatically. Advanced users can enter another compatible endpoint.</p>
         <label class="field"><span>Service endpoint</span><input type="url" data-endpoint required inputmode="url" placeholder="https://service.example" /></label>
-        <label class="field"><span>API key</span><span class="password-field"><input type="password" data-api-key autocomplete="off" placeholder="Paste your API key" /><button type="button" data-toggle-key aria-label="Show API key"><svg class="icon" aria-hidden="true"><use href="#cloud-icon-eye"></use></svg></button></span></label>
-        <label class="check-field"><input type="checkbox" data-remember-key /><span>Remember this key on this device</span></label>
         <div class="connection-result" data-connection-result role="status" aria-live="polite"></div>
         <div class="dialog-actions">
           <button class="button button-secondary" type="button" data-test-connection><svg class="icon" aria-hidden="true"><use href="#cloud-icon-signal"></use></svg> Test connection</button>
