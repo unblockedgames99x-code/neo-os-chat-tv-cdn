@@ -120,9 +120,9 @@
     if (!featured.length) featured = catalog.filter(function (game) { return coverFor(game); }).slice(0, 6);
     setHero(featured[0] || catalog[0]);
     var rows = [
-      ["Featured", featured.concat(catalog.filter(function (game) { return coverFor(game) && featured.indexOf(game) < 0; }).slice(0, 24))],
-      ["Arcade essentials", picksByPattern(/slope|run |runner|dash|race|moto|bike|drift|tunnel|subway|pac ?man|sonic/, 34)],
-      ["Adventure & platform", picksByPattern(/mario|adventure|quest|zelda|kirby|metroid|papa|duck life|fireboy|watergirl|vex/, 34)],
+      ["Popular games", featured.concat(catalog.filter(function (game) { return coverFor(game) && featured.indexOf(game) < 0; }).slice(0, 24))],
+      ["Action & arcade", picksByPattern(/slope|run |runner|dash|race|moto|bike|drift|tunnel|subway|pac ?man|sonic/, 34)],
+      ["Adventure & platformers", picksByPattern(/mario|adventure|quest|zelda|kirby|metroid|papa|duck life|fireboy|watergirl|vex/, 34)],
       ["Puzzle & strategy", picksByPattern(/chess|tetris|2048|puzzle|sudoku|solitaire|bloons|tower|factory|alchemy|craft/, 34)],
       ["Retro classics", picksByPattern(/mario|sonic|pokemon|doom|pac|nintendo|atari|retro|gba|nes|n64/, 34)]
     ];
@@ -163,7 +163,7 @@
     $("[data-hero]").hidden = true;
     $("[data-home-rails]").hidden = true;
     $("[data-library]").hidden = false;
-    var names = { all: ["ALL GAMES", "Complete library"], favorites: ["YOUR LIBRARY", "Favorite games"], recent: ["PLAY AGAIN", "Recently played"] };
+    var names = { all: ["GAME LIBRARY", "All games"], favorites: ["YOUR LIBRARY", "Favorite games"], recent: ["PLAY AGAIN", "Recently played"] };
     var labels = names[mode] || names.all;
     $("[data-library-label]").textContent = labels[0];
     $("[data-library-title]").textContent = query ? 'Results for "' + query + '"' : labels[1];
@@ -274,6 +274,7 @@
 
   function init() {
     $$(".nav-button[data-mode]").forEach(function (button) { button.addEventListener("click", function () { query = ""; $("[data-search]").value = ""; setMode(button.dataset.mode); }); });
+    $(".neo-mark").addEventListener("click", function () { query = ""; $("[data-search]").value = ""; setMode("home"); });
     $("[data-hero-play]").addEventListener("click", function () { openGame(activeGame); });
     $("[data-more]").addEventListener("click", renderNext);
     $("[data-source]").addEventListener("change", function () { source = this.value; renderLibrary(true); });
