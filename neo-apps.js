@@ -22,17 +22,17 @@
     },
     cinehd: {
       id: "cinehd",
-      title: "NEO TV",
-      subtitle: "Movies and television",
+      title: "NEO Stream",
+      subtitle: "Profiles, movies, series, and My List",
       icon: "zstream",
-      route: "./neo-tv/index.html?v=20260908-movie-loader-v1",
-      keepAlive: true,
+      route: "./neo-tv/index.html?v=20260910-stream-v1",
+      keepAlive: false,
       width: 1180,
       height: 760,
       launcher: true,
       pinned: false,
       category: "Media",
-      aliases: ["neo tv", "movies", "series", "television", "tv", "streaming"]
+      aliases: ["neo stream", "neo tv", "movies", "series", "television", "tv", "streaming", "netflix"]
     },
     discord: {
       id: "discord",

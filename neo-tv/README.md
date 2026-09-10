@@ -1,13 +1,12 @@
-# NEO TV
+# NEO Stream
 
-A black-and-white NEO interface applied to the deployed Z-Stream web client.
+NEO Stream is the lightweight, original streaming interface built into NEO OS.
 
-## Local preview
+- local profiles with no sign-in
+- profile-specific My List and continue-watching progress
+- theme synchronization with NEO OS
+- lazy catalog rows and images
+- native video playback and picture-in-picture
+- live discovery through public, CORS-enabled catalog APIs
 
-```powershell
-npm run dev
-```
-
-Advertising, pop-under scripts, promotional notices, account prompts, and the original top utility icons are disabled by the local shell.
-
-The upstream application is licensed under AGPL-3.0. See `LICENSE.md` and `UPSTREAM.md`.
+The included playable titles use open sample videos. External discovery results link to their official page; no third-party credentials or private source code are bundled.

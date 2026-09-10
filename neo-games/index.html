@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="NEO Games — the complete lightweight game library.">
+  <title>NEO Games</title>
+  <script src="../neo-app-theme.js?v=20260907-theme-system-v2"></script>
+  <link rel="stylesheet" href="../neo-fonts.css?v=20260906-select-contrast-v2">
+  <link rel="stylesheet" href="./app.css?v=20260910-games-v1">
+  <script src="./config.js?v=20260910-games-v1"></script>
+  <script defer src="./app.js?v=20260910-games-v1"></script>
+</head>
+<body>
+  <aside class="side-nav" aria-label="NEO Games navigation">
+    <button class="neo-mark" type="button" data-mode="home" aria-label="NEO Games home">N</button>
+    <nav>
+      <button class="nav-button is-active" type="button" data-mode="home"><span class="nav-icon">⌂</span><span>Home</span></button>
+      <button class="nav-button" type="button" data-mode="all"><span class="nav-icon">▦</span><span>All games</span></button>
+      <button class="nav-button" type="button" data-mode="favorites"><span class="nav-icon">♡</span><span>Favorites</span></button>
+      <button class="nav-button" type="button" data-mode="recent"><span class="nav-icon">↻</span><span>Recent</span></button>
+    </nav>
+    <a class="nav-button nav-bottom" href="../neo-tv/index.html"><span class="nav-icon">▶</span><span>NEO Stream</span></a>
+  </aside>
+
+  <main data-main>
+    <header class="topbar">
+      <div class="wordmark"><strong>NEO</strong><span>GAMES</span></div>
+      <label class="search"><span>⌕</span><input type="search" data-search aria-label="Search games" placeholder="Search thousands of games"></label>
+      <div class="catalog-count" data-count>LOADING LIBRARY</div>
+    </header>
+    <section class="hero" data-hero hidden>
+      <div class="hero-art" data-hero-art></div><div class="hero-shade"></div>
+      <div class="hero-copy"><span class="eyebrow">FEATURED</span><h1 data-hero-title></h1><p data-hero-meta></p><button class="play" type="button" data-hero-play>▶ Play now</button></div>
+    </section>
+    <section class="home-rails" data-home-rails></section>
+    <section class="library" data-library hidden>
+      <header class="library-head"><div><span class="eyebrow" data-library-label>ALL GAMES</span><h1 data-library-title>Complete library</h1></div><label>Source<select data-source><option value="">All sources</option></select></label></header>
+      <div class="game-grid" data-grid></div>
+      <div class="library-state" data-state>Loading the complete catalog…</div>
+      <button class="load-more" type="button" data-more hidden>Load more</button>
+    </section>
+  </main>
+
+  <section class="player" data-player hidden>
+    <header><div><span class="player-dot"></span><strong data-player-title>Game</strong></div><div><button type="button" data-player-fullscreen>Fullscreen</button><a target="_blank" rel="noopener" data-player-open>Open separately</a><button type="button" data-player-close>Close</button></div></header>
+    <div class="frame-wrap"><iframe data-game-frame title="Game" allow="autoplay; fullscreen; gamepad; clipboard-read; clipboard-write" allowfullscreen></iframe><div class="frame-status" data-frame-status>Loading game…</div></div>
+  </section>
+  <template id="game-card"><button class="game-card" type="button"><span class="cover"><img alt="" loading="lazy" decoding="async"><span class="play-mark">▶</span></span><span class="copy"><strong></strong><small></small></span><span class="favorite" title="Favorite">♡</span></button></template>
+</body>
+</html>

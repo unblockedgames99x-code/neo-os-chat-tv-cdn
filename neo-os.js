@@ -298,9 +298,10 @@
     zones: {
       id: "zones",
       title: "Games",
-      subtitle: "NEO Games",
+      subtitle: "Complete NEO game library",
       icon: "html-games",
-      template: "library-template",
+      route: "./neo-games/index.html?v=20260910-games-v1",
+      keepAlive: false,
       width: 1180,
       height: 760,
       launcher: true,
