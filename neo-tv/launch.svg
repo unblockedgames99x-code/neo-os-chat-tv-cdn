@@ -34,7 +34,7 @@
         host.textContent = 'NEO Stream needs service-worker support.';
         return;
       }
-      var workerUrl = new URL('launcher-sw.js?v=20260910-stream-v1', location.href).href;
+      var workerUrl = new URL('launcher-sw.js?v=20260910-media-sections-v1', location.href).href;
       var scope = new URL('./', location.href).pathname;
       navigator.serviceWorker.register(workerUrl, { scope: scope })
         .then(waitUntilActive)

@@ -12,6 +12,10 @@
   var searchAbort = null;
   var saveProgressAt = 0;
   var heroTimer = 0;
+  var requestedView = "";
+  try { requestedView = new URLSearchParams(location.search).get("view") || ""; } catch (error) {}
+  var initialView = ["home", "movies", "series", "anime", "manga", "list"].indexOf(requestedView) !== -1 ? requestedView : "home";
+  var currentView = initialView;
 
   function $(selector, root) { return (root || document).querySelector(selector); }
   function $$(selector, root) { return Array.from((root || document).querySelectorAll(selector)); }
@@ -137,11 +141,12 @@
     $("[data-profile-name]").textContent = profile.name;
     $("[data-profile-gate]").hidden = true;
     $("[data-app-shell]").hidden = false;
-    renderView("home");
+    renderView(initialView);
   }
 
   function meta(title) {
-    return [title.year || "NEW", title.rating ? Number(title.rating).toFixed(1) + " ★" : "", title.maturity || "", title.type === "series" ? "SERIES" : "MOVIE"].filter(Boolean).join("  ·  ");
+    var labels = { movie: "MOVIE", series: "SERIES", anime: "ANIME", manga: "MANGA" };
+    return [title.year || "NEW", title.rating ? Number(title.rating).toFixed(1) + " ★" : "", title.maturity || "", labels[title.type] || "TITLE"].filter(Boolean).join("  ·  ");
   }
   function imageFor(title, backdrop) {
     if (getSettings().dataSaver && backdrop && title.poster) return title.poster;
@@ -157,6 +162,8 @@
     $("[data-hero-title]").textContent = title.title;
     $("[data-hero-meta]").textContent = meta(title);
     $("[data-hero-description]").textContent = title.description || "A new story is waiting.";
+    var heroAction = $("[data-hero-action]");
+    if (heroAction) heroAction.textContent = title.type === "manga" ? "Read" : (title.media ? "Play" : "More info");
     var image = $("[data-hero-image]");
     image.style.opacity = "0";
     window.setTimeout(function () {
@@ -179,6 +186,8 @@
     var items = allowedCatalog();
     if (view === "movies") return [{ title: "NEO movies", items: items.filter(function (item) { return item.type === "movie"; }) }].concat(liveRows);
     if (view === "series") return [{ title: "NEO series", items: items.filter(function (item) { return item.type === "series"; }) }, { title: "Discover series", tvmaze: true }];
+    if (view === "anime") return [{ title: "Anime library", items: items.filter(function (item) { return item.type === "anime"; }) }];
+    if (view === "manga") return [{ title: "Manga library", items: items.filter(function (item) { return item.type === "manga"; }), portrait: true }];
     if (view === "list") return [{ title: "My List", items: items.filter(function (item) { return data.list.indexOf(item.id) !== -1; }) }];
     var progressItems = Object.keys(data.progress).map(function (id) { return items.find(function (item) { return item.id === id; }); }).filter(Boolean);
     return [
@@ -186,7 +195,9 @@
       { title: "Trending now", items: items.slice(0, 12) },
       { title: "Only on NEO", items: items.filter(function (item) { return item.rating >= 8.4; }) },
       { title: "Movies", items: items.filter(function (item) { return item.type === "movie"; }).slice(0, 12) },
-      { title: "Series", items: items.filter(function (item) { return item.type === "series"; }).slice(0, 12) }
+      { title: "Series", items: items.filter(function (item) { return item.type === "series"; }).slice(0, 12) },
+      { title: "Anime", items: items.filter(function (item) { return item.type === "anime"; }).slice(0, 12) },
+      { title: "Manga", items: items.filter(function (item) { return item.type === "manga"; }).slice(0, 12), portrait: true }
     ].filter(function (row) { return row.items.length; }).concat(liveRows.slice(0, 3));
   }
 
@@ -219,7 +230,7 @@
     section.innerHTML = '<div class="rail-heading"><h2></h2><span>LOADING</span></div><div class="rail-track"></div>';
     $("h2", section).textContent = row.title;
     var track = $(".rail-track", section);
-    if (row.items) renderCards(track, row.items, false);
+    if (row.items) renderCards(track, row.items, Boolean(row.portrait));
     else {
       section.dataset.live = row.endpoint || (row.tvmaze ? "tvmaze" : "");
       track.innerHTML = '<div class="rail-skeleton"></div><div class="rail-skeleton"></div><div class="rail-skeleton"></div>';
@@ -268,11 +279,13 @@
   }, { rootMargin: "500px 0px" });
 
   function renderView(view) {
+    if (["home", "movies", "series", "anime", "manga", "list"].indexOf(view) === -1) view = "home";
+    currentView = view;
     clearInterval(heroTimer);
     $$(".nav-button[data-view]").forEach(function (button) { button.classList.toggle("is-active", button.dataset.view === view); });
     $("[data-search]").value = "";
     $("[data-search-results]").hidden = true;
-    $("[data-hero]").hidden = view === "list";
+    $("[data-hero]").hidden = view === "list" || view === "manga";
     var rails = $("[data-rails]");
     rails.hidden = false;
     rails.replaceChildren();
@@ -281,8 +294,14 @@
       rails.appendChild(rail);
       if (rail.dataset.live) railObserver.observe(rail);
     });
-    if (view !== "list") {
-      var featured = allowedCatalog().filter(function (title) { return title.openSample; });
+    if (view !== "list" && view !== "manga") {
+      var featured = allowedCatalog().filter(function (title) {
+        if (!title.openSample) return false;
+        if (view === "movies") return title.type === "movie";
+        if (view === "series") return title.type === "series";
+        if (view === "anime") return title.type === "anime";
+        return title.type !== "manga";
+      });
       setHero(featured[0]);
       if (getSettings().autoplayPreview && featured.length > 1) {
         var index = 0;
@@ -316,8 +335,8 @@
     var metaLine = document.createElement("p"); metaLine.className = "details-meta"; metaLine.textContent = meta(title);
     var description = document.createElement("p"); description.className = "details-description"; description.textContent = title.description || "Discover this title.";
     var actions = document.createElement("div"); actions.className = "details-actions";
-    var play = document.createElement("button"); play.type = "button"; play.className = "primary"; play.textContent = title.media ? "Play" : "Open official page";
-    play.addEventListener("click", function () { title.media ? playTitle(title) : openOfficial(title); });
+    var play = document.createElement("button"); play.type = "button"; play.className = "primary"; play.textContent = title.type === "manga" ? "Read" : (title.media ? "Play" : "Open official page");
+    play.addEventListener("click", function () { title.type === "manga" ? openReader(title) : (title.media ? playTitle(title) : openOfficial(title)); });
     var listButton = document.createElement("button"); listButton.type = "button"; listButton.className = "secondary"; listButton.textContent = inList ? "✓ In My List" : "+ My List";
     listButton.addEventListener("click", function () {
       var current = currentData();
@@ -332,6 +351,43 @@
     card.append(backdrop, close, body);
     $("[data-details-dialog]").showModal();
   }
+  function openReader(title) {
+    if (!title || title.type !== "manga") return;
+    if ($("[data-details-dialog]").open) $("[data-details-dialog]").close();
+    activeTitle = title;
+    $("[data-reader-title]").textContent = title.title;
+    $("[data-reader-meta]").textContent = meta(title);
+    var pages = $("[data-reader-pages]");
+    pages.replaceChildren();
+    (Array.isArray(title.chapters) ? title.chapters : []).forEach(function (chapterItem, chapterIndex) {
+      var chapterSection = document.createElement("section");
+      chapterSection.className = "reader-chapter";
+      var heading = document.createElement("h2");
+      heading.textContent = clean(chapterItem.title) || "Chapter " + (chapterIndex + 1);
+      chapterSection.appendChild(heading);
+      (Array.isArray(chapterItem.pages) ? chapterItem.pages : []).forEach(function (pageText, pageIndex) {
+        var page = document.createElement("article");
+        page.className = "manga-page";
+        var number = document.createElement("span");
+        number.textContent = String(pageIndex + 1).padStart(2, "0");
+        var copy = document.createElement("p");
+        copy.textContent = clean(pageText);
+        page.append(number, copy);
+        chapterSection.appendChild(page);
+      });
+      pages.appendChild(chapterSection);
+    });
+    if (!pages.children.length) {
+      var empty = document.createElement("p");
+      empty.className = "reader-empty";
+      empty.textContent = "This title does not have a readable chapter yet.";
+      pages.appendChild(empty);
+    }
+    $("[data-reader]").hidden = false;
+    pages.scrollTop = 0;
+    requestAnimationFrame(function () { pages.focus({ preventScroll: true }); });
+  }
+  function closeReader() { $("[data-reader]").hidden = true; }
   function openOfficial(title) {
     if (title.officialUrl) window.open(title.officialUrl, "_blank", "noopener,noreferrer");
   }
@@ -373,16 +429,24 @@
     if (!query) {
       section.hidden = true;
       $("[data-rails]").hidden = false;
-      $("[data-hero]").hidden = false;
+      $("[data-hero]").hidden = currentView === "list" || currentView === "manga";
       return;
     }
     section.hidden = false; $("[data-rails]").hidden = true; $("[data-hero]").hidden = true;
-    var local = allowedCatalog().filter(function (title) { return [title.title, title.genre, title.description].join(" ").toLowerCase().indexOf(query) >= 0; });
+    var searchable = allowedCatalog();
+    if (["movies", "series", "anime", "manga"].indexOf(currentView) !== -1) {
+      var searchType = currentView === "movies" ? "movie" : currentView;
+      searchable = searchable.filter(function (title) { return title.type === searchType; });
+    } else if (currentView === "list") {
+      var list = currentData().list;
+      searchable = searchable.filter(function (title) { return list.indexOf(title.id) !== -1; });
+    }
+    var local = searchable.filter(function (title) { return [title.title, title.genre, title.description].join(" ").toLowerCase().indexOf(query) >= 0; });
     grid.replaceChildren();
     local.forEach(function (title) { grid.appendChild(createCard(title, true)); });
     empty.hidden = local.length > 0;
     if (searchAbort) searchAbort.abort();
-    if (query.length < 3) return;
+    if (query.length < 3 || currentView === "anime" || currentView === "manga" || currentView === "list") return;
     searchAbort = new AbortController();
     fetch("https://api.tvmaze.com/search/shows?q=" + encodeURIComponent(query), { credentials: "omit", signal: searchAbort.signal })
       .then(function (response) { if (!response.ok) throw new Error("Search unavailable"); return response.json(); })
@@ -450,11 +514,11 @@
     $$("[data-view]").forEach(function (button) {
       button.addEventListener("click", function () { if (button.tagName !== "A") renderView(button.dataset.view); });
     });
-    $("[data-hero-play]").addEventListener("click", function () { playTitle(activeTitle); });
+    $("[data-hero-play]").addEventListener("click", function () { activeTitle && activeTitle.type === "manga" ? openReader(activeTitle) : playTitle(activeTitle); });
     $("[data-hero-details]").addEventListener("click", function () { openDetails(activeTitle); });
     $("[data-open-settings]").addEventListener("click", function () { $("[data-settings-dialog]").showModal(); });
     $("[data-data-saver]").addEventListener("change", function () { var value = getSettings(); value.dataSaver = this.checked; save(settingsKey, value); syncSettings(); });
-    $("[data-autoplay-preview]").addEventListener("change", function () { var value = getSettings(); value.autoplayPreview = this.checked; save(settingsKey, value); renderView("home"); });
+    $("[data-autoplay-preview]").addEventListener("change", function () { var value = getSettings(); value.autoplayPreview = this.checked; save(settingsKey, value); renderView(currentView); });
     var searchTimer = 0;
     $("[data-search]").addEventListener("input", function () {
       var value = this.value;
@@ -462,6 +526,7 @@
       searchTimer = window.setTimeout(function () { showSearch(value); }, 160);
     });
     $("[data-close-player]").addEventListener("click", closePlayer);
+    $("[data-close-reader]").addEventListener("click", closeReader);
     $("[data-pip]").addEventListener("click", function () {
       var video = $("[data-video]");
       if (!document.pictureInPictureEnabled || video.disablePictureInPicture) return;
@@ -472,7 +537,11 @@
     $("[data-video]").addEventListener("ended", function () { persistProgress(true); });
     $("[data-details-dialog]").addEventListener("click", function (event) { if (event.target === this) this.close(); });
     window.addEventListener("beforeunload", function () { persistProgress(true); });
-    window.addEventListener("keydown", function (event) { if (event.key === "Escape" && !$("[data-player]").hidden) closePlayer(); });
+    window.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") return;
+      if (!$("[data-reader]").hidden) closeReader();
+      else if (!$("[data-player]").hidden) closePlayer();
+    });
     document.addEventListener("visibilitychange", function () { if (document.hidden && !$("[data-player]").hidden) $("[data-video]").pause(); });
     var id = "";
     try { id = sessionStorage.getItem(sessionKey) || ""; } catch (error) {}
@@ -482,7 +551,8 @@
     window.NEO_STREAM = Object.freeze({
       showProfiles: function () { $("[data-app-shell]").hidden = true; $("[data-profile-gate]").hidden = false; renderProfileGate(false); },
       openTitle: function (id) { var title = catalog.find(function (item) { return item.id === id; }); if (title) openDetails(title); },
-      search: function (query) { $("[data-search]").value = String(query || ""); showSearch(query); }
+      search: function (query) { $("[data-search]").value = String(query || ""); showSearch(query); },
+      openView: renderView
     });
     registerWebTools();
   }
