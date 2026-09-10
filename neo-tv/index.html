@@ -10,9 +10,9 @@
   <link rel="stylesheet" href="../neo-theme-system.css?v=20260907-theme-system-v2">
   <link rel="stylesheet" href="../neo-fonts.css?v=20260906-select-contrast-v2">
   <link rel="preload" href="./assets/profile-avatars-v1.webp" as="image" type="image/webp">
-  <link rel="stylesheet" href="./app.css?v=20260910-clean-nav-v2">
-  <script defer src="./catalog.js?v=20260910-verified-catalog-v1"></script>
-  <script defer src="./app.js?v=20260910-poster-recovery-v1"></script>
+  <link rel="stylesheet" href="./app.css?v=20260910-open-streaming-v1">
+  <script defer src="./catalog.js?v=20260910-open-streaming-v1"></script>
+  <script defer src="./app.js?v=20260910-open-streaming-v1"></script>
 </head>
 <body>
   <div class="app-shell" data-app-shell hidden>
@@ -97,7 +97,7 @@
       <span class="eyebrow">NEO STREAM</span><h2>Playback & data</h2>
       <label class="check"><input type="checkbox" data-data-saver> Data saver (smaller images)</label>
       <label class="check"><input type="checkbox" data-autoplay-preview> Autoplay previews</label>
-      <p class="dialog-note">Discovery uses public movie and TV catalogs. Titles open their official page when one is available.</p>
+      <p class="dialog-note">The Streaming now row plays open films directly. Discovery rows use public movie and TV catalogs and link to official title pages.</p>
       <div class="dialog-actions"><button value="cancel" class="primary">Done</button></div>
     </form>
   </dialog>
@@ -108,7 +108,11 @@
 
   <section class="player" data-player hidden aria-label="Video player">
     <video data-video controls playsinline preload="metadata"></video>
-    <div class="player-top"><strong data-player-title></strong><div><button type="button" data-pip>Pop out</button><button type="button" data-close-player>Close</button></div></div>
+    <div class="player-top"><strong data-player-title></strong><div><button type="button" data-fullscreen-player>Full screen</button><button type="button" data-pip>Pop out</button><button type="button" data-close-player>Close</button></div></div>
+    <div class="player-status" data-player-status hidden role="status" aria-live="polite">
+      <p data-player-message></p>
+      <div><button type="button" class="primary" data-retry-player hidden>Retry stream</button><button type="button" class="secondary" data-player-official hidden>Official film page</button></div>
+    </div>
   </section>
 
   <section class="manga-reader" data-reader hidden aria-label="Manga reader">

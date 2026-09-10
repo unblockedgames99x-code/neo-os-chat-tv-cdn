@@ -14,6 +14,11 @@
   var heroTimer = 0;
   var requestedView = "";
   var posterFallbacks = Object.create(null);
+  var heroImageRequest = 0;
+  var activeMediaSources = [];
+  var activeMediaIndex = 0;
+  var activeResumeAt = 0;
+  var playerLoadId = 0;
   var profileAvatars = [
     { id: "robot-blue", label: "Blue robot", x: 0, y: 0 },
     { id: "monster-red", label: "Red creature", x: 33.333, y: 0 },
@@ -261,6 +266,13 @@
     if (!activeProfile || !activeProfile.kids) return catalog.slice();
     return catalog.filter(function (title) { return !/14|13|18|R/.test(title.maturity || ""); });
   }
+  function streamSources(title) {
+    if (!title) return [];
+    var candidates = [title.media].concat(Array.isArray(title.mediaFallbacks) ? title.mediaFallbacks : []);
+    return candidates.filter(function (source, index) {
+      return /^https:\/\//i.test(String(source || "")) && candidates.indexOf(source) === index;
+    });
+  }
   function setHero(title) {
     if (!title) return;
     activeTitle = title;
@@ -271,10 +283,16 @@
     if (heroAction) heroAction.textContent = title.type === "manga" ? "Read" : (title.media ? "Play" : "More info");
     var image = $("[data-hero-image]");
     image.style.opacity = "0";
+    var requestId = ++heroImageRequest;
     window.setTimeout(function () {
       var source = imageFor(title, true);
-      image.style.backgroundImage = source ? 'url("' + source.replace(/"/g, "%22") + '")' : "none";
-      image.style.opacity = "1";
+      function apply(sourceUrl) {
+        if (requestId !== heroImageRequest) return;
+        image.style.backgroundImage = sourceUrl ? 'url("' + sourceUrl.replace(/"/g, "%22") + '")' : "none";
+        image.style.opacity = "1";
+      }
+      if (source) apply(source);
+      else wikipediaPoster(title.title).then(apply).catch(function () { apply(""); });
     }, 80);
   }
 
@@ -289,7 +307,8 @@
   function rowsFor(view) {
     var data = currentData();
     var items = allowedCatalog();
-    if (view === "movies") return liveRows;
+    var streaming = items.filter(function (item) { return item.type === "movie" && streamSources(item).length; });
+    if (view === "movies") return [{ title: "Streaming now", items: streaming, portrait: true, emptyMessage: "No playable films are available right now." }].concat(liveRows);
     if (view === "series") return [{ title: "Discover series", tvmaze: true }];
     if (view === "anime") return [{ title: "Anime", items: [], emptyMessage: "No verified anime titles are available yet." }];
     if (view === "manga") return [{ title: "Manga", items: [], portrait: true, emptyMessage: "No verified manga titles are available yet." }];
@@ -297,7 +316,7 @@
     var progressItems = Object.keys(data.progress).map(function (id) { return items.find(function (item) { return item.id === id; }); }).filter(Boolean);
     return [
       { title: "Continue watching", items: progressItems },
-      { title: "Movies", items: items.filter(function (item) { return item.type === "movie"; }).slice(0, 12) },
+      { title: "Streaming now", items: streaming.slice(0, 12), portrait: true },
       { title: "Series", items: items.filter(function (item) { return item.type === "series"; }).slice(0, 12) }
     ].filter(function (row) { return row.items.length; }).concat(liveRows.slice(0, 3));
   }
@@ -505,19 +524,58 @@
   function openOfficial(title) {
     if (title.officialUrl) window.open(title.officialUrl, "_blank", "noopener,noreferrer");
   }
-  function playTitle(title) {
-    if (!title || !title.media) return openOfficial(title || {});
-    if ($("[data-details-dialog]").open) $("[data-details-dialog]").close();
+  function setPlayerMessage(message, failed) {
+    var status = $("[data-player-status]");
+    if (!status) return;
+    $("[data-player-message]").textContent = message || "";
+    status.hidden = !message;
+    $("[data-retry-player]").hidden = !failed;
+    $("[data-player-official]").hidden = !failed || !activeTitle || !activeTitle.officialUrl;
+  }
+  function startPlayerSource(index, resumeAt) {
     var video = $("[data-video]");
+    if (!activeMediaSources[index]) return;
+    activeMediaIndex = index;
+    activeResumeAt = Math.max(0, Number(resumeAt) || 0);
+    var loadId = ++playerLoadId;
+    setPlayerMessage(index ? "Switching to backup stream…" : "Loading stream…", false);
+    video.src = activeMediaSources[index];
+    video.load();
+    video.addEventListener("loadedmetadata", function restore() {
+      if (loadId !== playerLoadId) return;
+      if (activeResumeAt && activeResumeAt < video.duration - 10) video.currentTime = activeResumeAt;
+    }, { once: true });
+    video.addEventListener("canplay", function ready() {
+      if (loadId === playerLoadId) setPlayerMessage("", false);
+    }, { once: true });
+    video.play().catch(function () {});
+  }
+  function handlePlaybackError() {
+    var player = $("[data-player]");
+    var video = $("[data-video]");
+    if (player.hidden || !activeMediaSources.length) return;
+    var resumeAt = Math.max(activeResumeAt, Number(video.currentTime) || 0);
+    if (activeMediaIndex + 1 < activeMediaSources.length) {
+      startPlayerSource(activeMediaIndex + 1, resumeAt);
+      return;
+    }
+    setPlayerMessage("The stream could not start. Retry it or open the official film page.", true);
+  }
+  function retryPlayer() {
+    if (!activeMediaSources.length) return;
+    startPlayerSource(0, Math.max(activeResumeAt, Number($("[data-video]").currentTime) || 0));
+  }
+  function playTitle(title) {
+    var sources = streamSources(title);
+    if (!title || !sources.length) return openOfficial(title || {});
+    if ($("[data-details-dialog]").open) $("[data-details-dialog]").close();
+    activeTitle = title;
+    activeMediaSources = sources;
+    activeMediaIndex = 0;
     $("[data-player-title]").textContent = title.title;
     $("[data-player]").hidden = false;
-    video.src = title.media;
     var progress = currentData().progress[title.id];
-    video.addEventListener("loadedmetadata", function restore() {
-      video.removeEventListener("loadedmetadata", restore);
-      if (progress && progress.time < video.duration - 10) video.currentTime = progress.time || 0;
-    });
-    video.play().catch(function () {});
+    startPlayerSource(0, progress ? progress.time : 0);
   }
   function persistProgress(force) {
     var video = $("[data-video]");
@@ -530,9 +588,14 @@
   function closePlayer() {
     var video = $("[data-video]");
     persistProgress(true);
+    activeMediaSources = [];
+    activeMediaIndex = 0;
+    activeResumeAt = 0;
+    playerLoadId += 1;
     video.pause();
     video.removeAttribute("src");
     video.load();
+    setPlayerMessage("", false);
     $("[data-player]").hidden = true;
   }
   function showSearch(query) {
@@ -640,6 +703,15 @@
       searchTimer = window.setTimeout(function () { showSearch(value); }, 160);
     });
     $("[data-close-player]").addEventListener("click", closePlayer);
+    $("[data-retry-player]").addEventListener("click", retryPlayer);
+    $("[data-player-official]").addEventListener("click", function () { if (activeTitle) openOfficial(activeTitle); });
+    $("[data-fullscreen-player]").addEventListener("click", function () {
+      var player = $("[data-player]");
+      var video = $("[data-video]");
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});
+      else if (player.requestFullscreen) player.requestFullscreen().catch(function () {});
+      else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+    });
     $("[data-close-reader]").addEventListener("click", closeReader);
     $("[data-pip]").addEventListener("click", function () {
       var video = $("[data-video]");
@@ -649,6 +721,7 @@
     });
     $("[data-video]").addEventListener("timeupdate", function () { persistProgress(false); }, { passive: true });
     $("[data-video]").addEventListener("ended", function () { persistProgress(true); });
+    $("[data-video]").addEventListener("error", handlePlaybackError);
     $("[data-details-dialog]").addEventListener("click", function (event) { if (event.target === this) this.close(); });
     window.addEventListener("beforeunload", function () { persistProgress(true); });
     window.addEventListener("keydown", function (event) {
