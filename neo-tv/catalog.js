@@ -1,12 +1,12 @@
 (function () {
   "use strict";
   var samples = [
-    "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    "https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-    "https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.webm",
+    "https://media.w3.org/2010/05/sintel/trailer.mp4",
+    "https://media.w3.org/2010/05/bunny/trailer.mp4",
+    "https://media.w3.org/2010/05/video/movie_300.mp4",
+    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
   ];
   var titles = [
     ["open-horizons","Open Horizons","movie",2026,"Adventure",8.7,"A pilot follows a signal past the edge of every known map.","horizon",0,"PG"],
