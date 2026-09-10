@@ -77,6 +77,23 @@ html.neo-auto-hide-bars .neo-window > .window-body {
   min-height: 0;
 }
 
+/* App windows need a persistent hit target for mouse and pen dragging. The
+   shell status bar may auto-hide, but the application bar stays reachable. */
+html.neo-auto-hide-bars .neo-window {
+  grid-template-rows: var(--neo-window-chrome-height) minmax(0, 1fr) !important;
+}
+
+html.neo-auto-hide-bars .neo-window::before {
+  display: none;
+}
+
+html.neo-auto-hide-bars .neo-window > .window-chrome {
+  position: relative !important;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
 @media (hover: none), (pointer: coarse) {
   html.neo-auto-hide-bars .neo-status-strip {
     opacity: 1;

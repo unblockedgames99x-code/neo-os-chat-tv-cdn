@@ -565,7 +565,7 @@
       // Plain domains and search phrases are handled below.
     }
     if (!input.includes(" ") && input.includes(".")) return `https://${input}`;
-    return `https://html.duckduckgo.com/html/?q=${encodeURIComponent(input)}`;
+    return `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(input)}`;
   }
 
   function externalDestination(value) {
@@ -773,13 +773,15 @@
     let musicSleepAt = 0;
     let musicSleepTimer = 0;
     let musicRadio = true;
+    let lastMusicProgressBroadcast = 0;
 
-    musicAudio.preload = "auto";
+    musicAudio.preload = "metadata";
     try {
       const savedMusicVolume = Number(localStorage.getItem("neo_music_volume"));
       if (Number.isFinite(savedMusicVolume) && savedMusicVolume >= 0 && savedMusicVolume <= 1) {
         musicAudio.volume = savedMusicVolume;
       }
+      musicAudio.muted = localStorage.getItem("neo_music_muted") === "true";
     } catch (error) {}
 
     function currentMusicTrack() {
@@ -862,14 +864,33 @@
       const track = musicList[index];
       const source = musicSourceFor(track);
       if (!track || !source) return;
+      const sameTrack = index === musicIndex && musicAudio.src === source && Boolean(musicAudio.currentSrc || musicAudio.src);
       musicIndex = index;
       musicWantsPlayback = autoplay;
-      musicAudio.pause();
-      musicAudio.src = source;
-      musicAudio.currentTime = 0;
-      musicAudio.load();
-      if (autoplay) musicAudio.play().catch(() => broadcastMusicState());
+      if (!sameTrack) {
+        musicAudio.pause();
+        musicAudio.src = source;
+        musicAudio.currentTime = 0;
+        musicAudio.load();
+      }
+      if (autoplay) requestMusicPlayback();
       broadcastMusicState();
+    }
+
+    function requestMusicPlayback() {
+      if (!musicWantsPlayback || !currentMusicTrack() || !musicAudio.paused) return;
+      musicAudio.play().then(() => {
+        musicFailureCount = 0;
+        broadcastMusicState();
+      }).catch((error) => {
+        if (!error || error.name !== "NotAllowedError") musicFailureCount += 1;
+        broadcastMusicState();
+      });
+    }
+
+    function unlockMusicPlayback(event) {
+      if (event?.type === "keydown" && (event.ctrlKey || event.metaKey || event.altKey)) return;
+      requestMusicPlayback();
     }
 
     function nextMusicTrack() {
@@ -920,7 +941,7 @@
           if (musicAudio.paused) {
             musicWantsPlayback = true;
             musicFailureCount = 0;
-            if (currentMusicTrack()) musicAudio.play().catch(() => broadcastMusicState());
+            requestMusicPlayback();
           } else {
             musicWantsPlayback = false;
             musicAudio.pause();
@@ -965,6 +986,11 @@
         case "volume":
           musicAudio.volume = Math.max(0, Math.min(1, Number(command.v) || 0));
           try { localStorage.setItem("neo_music_volume", String(musicAudio.volume)); } catch (error) {}
+          broadcastMusicState();
+          break;
+        case "mute":
+          musicAudio.muted = command.on === true;
+          try { localStorage.setItem("neo_music_muted", String(musicAudio.muted)); } catch (error) {}
           broadcastMusicState();
           break;
         case "shuffle":
@@ -1042,8 +1068,21 @@
       }
     }
 
-    ["play", "pause", "playing", "loadedmetadata", "durationchange", "timeupdate", "volumechange", "ratechange"].forEach((eventName) => {
-      musicAudio.addEventListener(eventName, broadcastMusicState);
+    ["play", "pause", "playing", "loadedmetadata", "durationchange", "volumechange", "ratechange"].forEach((eventName) => {
+      musicAudio.addEventListener(eventName, () => {
+        if (eventName === "volumechange") {
+          try {
+            localStorage.setItem("neo_music_volume", String(musicAudio.volume));
+            localStorage.setItem("neo_music_muted", String(musicAudio.muted));
+          } catch (error) {}
+        }
+        broadcastMusicState();
+      });
+    });
+    musicAudio.addEventListener("timeupdate", () => {
+      if (document.hidden || Date.now() - lastMusicProgressBroadcast < 200) return;
+      lastMusicProgressBroadcast = Date.now();
+      broadcastMusicState();
     });
     musicAudio.addEventListener("ended", () => {
       if (!musicAudio.loop) nextMusicTrack();
@@ -1058,6 +1097,9 @@
         broadcastMusicState();
       }
     });
+    window.addEventListener("pointerdown", unlockMusicPlayback, { capture: true, passive: true });
+    window.addEventListener("touchend", unlockMusicPlayback, { capture: true, passive: true });
+    window.addEventListener("keydown", unlockMusicPlayback, true);
 
     if ("mediaSession" in navigator) {
       const actions = {

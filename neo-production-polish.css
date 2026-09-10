@@ -407,9 +407,20 @@ html[data-neo-theme="glass"] {
 /* Keep the pill entirely outside a normal window. Maximized and true
    fullscreen windows collapse it to a single, unobtrusive exit control. */
 @media (min-width: 701px) {
+  html.neo-auto-hide-bars[data-window-bar-style="pill"] .neo-window:not(.is-maximized):not(.is-tab-fullscreen) {
+    grid-template-rows: var(--neo-window-chrome-height) minmax(0, 1fr) !important;
+  }
+
+  html.neo-auto-hide-bars[data-window-bar-style="pill"] .neo-window:not(.is-maximized):not(.is-tab-fullscreen) > .window-body {
+    grid-row: 2;
+  }
+
   html.neo-auto-hide-bars[data-window-bar-style="pill"] .neo-window:not(.is-maximized):not(.is-tab-fullscreen) > .window-chrome {
-    top: -6px;
-    transform: translate(-50%, -100%) !important;
+    position: relative !important;
+    top: auto;
+    left: auto;
+    margin: 5px 0;
+    transform: none !important;
   }
 
   html.neo-auto-hide-bars[data-window-bar-style="pill"] .neo-window:is(.is-maximized,.is-tab-fullscreen) > .window-chrome {

@@ -430,12 +430,22 @@
     });
     var widgets = menu.querySelector('[data-widget-action="show"]');
     var lock = menu.querySelector('[data-widget-action="lock"]');
+    var bottomVisualizer = menu.querySelector('[data-widget-action="bottom-visualizer"]');
+    var bottomVisualizerLabel = menu.querySelector("[data-bottom-visualizer-label]");
     if (widgets) widgets.setAttribute("aria-checked", !api || !api.getSetting || api.getSetting("widgets") ? "true" : "false");
     if (lock) lock.setAttribute("aria-checked", !api || !api.getSetting || api.getSetting("widgetLock") ? "true" : "false");
+    var bottomVisualizerEnabled = Boolean(window.NEO_BOTTOM_VISUALIZER && window.NEO_BOTTOM_VISUALIZER.isEnabled());
+    if (bottomVisualizer) bottomVisualizer.setAttribute("aria-checked", bottomVisualizerEnabled ? "true" : "false");
+    if (bottomVisualizerLabel) bottomVisualizerLabel.textContent = bottomVisualizerEnabled ? "Remove bottom music visualizer" : "Add bottom music visualizer";
     var fullscreen = menu.querySelector("[data-fullscreen-label]");
     if (fullscreen) fullscreen.textContent = document.fullscreenElement || document.webkitFullscreenElement ? "Exit fullscreen" : "Enter fullscreen";
     var recording = menu.querySelector("[data-recording-label]");
     if (recording) recording.textContent = desktopRecorder && desktopRecorder.state !== "inactive" ? "Stop Recording" : "Start Recording";
+    var iconToggle = menu.querySelector('[data-desktop-action="toggle-icons"]');
+    var iconToggleLabel = menu.querySelector("[data-desktop-icons-label]");
+    var iconsHidden = Boolean(api && api.getDesktopShortcutsHidden && api.getDesktopShortcutsHidden());
+    if (iconToggle) iconToggle.setAttribute("aria-pressed", iconsHidden ? "true" : "false");
+    if (iconToggleLabel) iconToggleLabel.textContent = iconsHidden ? "Show all icons" : "Hide all icons";
     sortDesktopShortcuts(sort);
   }
 
@@ -602,6 +612,9 @@
     else if (action === "customize") api.openApp("control");
     else if (action === "background") api.openWallpaperSource("installed");
     else if (action === "terminal") api.openApp("terminal");
+    else if (action === "toggle-icons" && api.setDesktopShortcutsHidden && api.getDesktopShortcutsHidden) {
+      api.setDesktopShortcutsHidden(!api.getDesktopShortcutsHidden());
+    }
     else if (action === "fullscreen") toggleDesktopFullscreen();
     else if (action === "refresh" && api.refresh) api.refresh();
   }
@@ -624,6 +637,7 @@
   function runWidgetAction(button) {
     var action = button.dataset.widgetAction;
     if (action === "manage") api.openApp("skins");
+    else if (action === "bottom-visualizer" && window.NEO_BOTTOM_VISUALIZER) window.NEO_BOTTOM_VISUALIZER.toggle();
     else if (action === "reset") api.resetLayout();
     else if (action === "show") api.setSetting("widgets", !api.getSetting("widgets"));
     else if (action === "lock") api.setSetting("widgetLock", !api.getSetting("widgetLock"));

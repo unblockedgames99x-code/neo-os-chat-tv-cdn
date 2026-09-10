@@ -13,8 +13,9 @@
     var failures = 0;
     var sleepAt = 0;
     var sleepTimer = 0;
+    var lastProgressBroadcast = 0;
 
-    audio.preload = "auto";
+    audio.preload = "metadata";
     try {
       var volumeMigrationKey = "neo_stream_music_volume_max_v1";
       var shouldStartAtMaximum = localStorage.getItem(volumeMigrationKey) !== "1";
@@ -27,6 +28,7 @@
         localStorage.setItem("neo_stream_music_volume", "1");
         localStorage.setItem(volumeMigrationKey, "1");
       }
+      audio.muted = localStorage.getItem("neo_stream_music_muted") === "true";
     } catch (error) {}
 
     function currentTrack() {
@@ -109,14 +111,33 @@
       var track = queue[nextIndex];
       var source = sourceFor(track);
       if (!track || !source) return;
+      var sameTrack = nextIndex === index && audio.src === source && Boolean(audio.currentSrc || audio.src);
       index = nextIndex;
       wantsPlayback = autoplay !== false;
-      audio.pause();
-      audio.src = source;
-      audio.currentTime = 0;
-      audio.load();
-      if (wantsPlayback) audio.play().catch(broadcast);
+      if (!sameTrack) {
+        audio.pause();
+        audio.src = source;
+        audio.currentTime = 0;
+        audio.load();
+      }
+      if (wantsPlayback) requestPlayback();
       broadcast();
+    }
+
+    function requestPlayback() {
+      if (!wantsPlayback || !currentTrack() || !audio.paused) return;
+      audio.play().then(function () {
+        failures = 0;
+        broadcast();
+      }).catch(function (error) {
+        if (!error || error.name !== "NotAllowedError") failures += 1;
+        broadcast();
+      });
+    }
+
+    function unlockPlayback(event) {
+      if (event && event.type === "keydown" && (event.ctrlKey || event.metaKey || event.altKey)) return;
+      requestPlayback();
     }
 
     function next() {
@@ -157,7 +178,7 @@
           if (audio.paused) {
             wantsPlayback = true;
             failures = 0;
-            if (currentTrack()) audio.play().catch(broadcast);
+            requestPlayback();
           } else {
             wantsPlayback = false;
             audio.pause();
@@ -193,6 +214,11 @@
         case "volume":
           audio.volume = Math.max(0, Math.min(1, Number(command.v) || 0));
           try { localStorage.setItem("neo_stream_music_volume", String(audio.volume)); } catch (error) {}
+          broadcast();
+          break;
+        case "mute":
+          audio.muted = command.on === true;
+          try { localStorage.setItem("neo_stream_music_muted", String(audio.muted)); } catch (error) {}
           broadcast();
           break;
         case "shuffle": shuffle = command.on === true; broadcast(); break;
@@ -325,10 +351,26 @@
       stop();
       window.removeEventListener("message", onMessage);
       window.removeEventListener("neo-media-volume-request", onVolume);
+      window.removeEventListener("pointerdown", unlockPlayback, true);
+      window.removeEventListener("touchend", unlockPlayback, true);
+      window.removeEventListener("keydown", unlockPlayback, true);
     }
 
-    ["play", "pause", "playing", "loadedmetadata", "durationchange", "timeupdate", "volumechange", "ratechange"].forEach(function (name) {
-      audio.addEventListener(name, broadcast);
+    ["play", "pause", "playing", "loadedmetadata", "durationchange", "volumechange", "ratechange"].forEach(function (name) {
+      audio.addEventListener(name, function () {
+        if (name === "volumechange") {
+          try {
+            localStorage.setItem("neo_stream_music_volume", String(audio.volume));
+            localStorage.setItem("neo_stream_music_muted", String(audio.muted));
+          } catch (error) {}
+        }
+        broadcast();
+      });
+    });
+    audio.addEventListener("timeupdate", function () {
+      if (document.hidden || Date.now() - lastProgressBroadcast < 200) return;
+      lastProgressBroadcast = Date.now();
+      broadcast();
     });
     audio.addEventListener("ended", function () { if (!audio.loop) next(); });
     audio.addEventListener("error", function () {
@@ -339,6 +381,9 @@
     });
     window.addEventListener("message", onMessage);
     window.addEventListener("neo-media-volume-request", onVolume);
+    window.addEventListener("pointerdown", unlockPlayback, { capture: true, passive: true });
+    window.addEventListener("touchend", unlockPlayback, { capture: true, passive: true });
+    window.addEventListener("keydown", unlockPlayback, true);
     if ("mediaSession" in navigator) {
       try { navigator.mediaSession.setActionHandler("play", function () { if (currentTrack()) audio.play().catch(function () {}); }); } catch (error) {}
       try { navigator.mediaSession.setActionHandler("pause", function () { audio.pause(); }); } catch (error) {}
