@@ -13,6 +13,7 @@
   var saveProgressAt = 0;
   var heroTimer = 0;
   var requestedView = "";
+  var posterFallbacks = Object.create(null);
   var profileAvatars = [
     { id: "robot-blue", label: "Blue robot", x: 0, y: 0 },
     { id: "monster-red", label: "Red creature", x: 33.333, y: 0 },
@@ -214,6 +215,48 @@
     if (getSettings().dataSaver && backdrop && title.poster) return title.poster;
     return (backdrop ? title.backdrop : title.poster) || "";
   }
+  function wikipediaPoster(title) {
+    var key = clean(title);
+    if (posterFallbacks[key]) return posterFallbacks[key];
+    var query = new URLSearchParams({
+      action: "query", format: "json", origin: "*", prop: "pageimages",
+      piprop: "thumbnail", pithumbsize: "600", redirects: "1", titles: key
+    });
+    posterFallbacks[key] = fetch("https://en.wikipedia.org/w/api.php?" + query.toString(), { credentials: "omit", cache: "force-cache" })
+      .then(function (response) { if (!response.ok) throw new Error("Poster unavailable"); return response.json(); })
+      .then(function (payload) {
+        var pages = payload && payload.query && payload.query.pages;
+        var page = pages && Object.keys(pages).map(function (id) { return pages[id]; })[0];
+        var source = page && page.thumbnail && page.thumbnail.source || "";
+        return /^https:\/\//i.test(source) ? source : "";
+      }).catch(function () { return ""; });
+    return posterFallbacks[key];
+  }
+  function loadPoster(image, title, source) {
+    var frame = image.closest(".poster");
+    var triedFallback = false;
+    if (frame) {
+      frame.dataset.fallback = title.title;
+      frame.classList.add("is-missing");
+    }
+    function finishMissing() {
+      image.removeAttribute("src");
+      image.alt = "";
+      if (frame) frame.classList.add("is-missing");
+    }
+    function useFallback() {
+      if (triedFallback) return finishMissing();
+      triedFallback = true;
+      wikipediaPoster(title.title).then(function (fallback) {
+        if (fallback) image.src = fallback;
+        else finishMissing();
+      });
+    }
+    image.addEventListener("load", function () { if (frame) frame.classList.remove("is-missing"); });
+    image.addEventListener("error", useFallback);
+    if (source) image.src = source;
+    else useFallback();
+  }
   function allowedCatalog() {
     if (!activeProfile || !activeProfile.kids) return catalog.slice();
     return catalog.filter(function (title) { return !/14|13|18|R/.test(title.maturity || ""); });
@@ -265,8 +308,7 @@
     card.classList.toggle("is-portrait", Boolean(portrait));
     image.alt = title.title;
     var source = imageFor(title, !portrait);
-    if (source) image.src = source;
-    image.addEventListener("error", function () { image.removeAttribute("src"); image.alt = ""; }, { once: true });
+    loadPoster(image, title, source);
     $(".card-copy strong", card).textContent = title.title;
     $(".card-copy small", card).textContent = meta(title);
     var progress = currentData().progress[title.id];
@@ -277,6 +319,7 @@
   }
   function renderCards(track, items, portrait) {
     var fragment = document.createDocumentFragment();
+    track.classList.toggle("is-poster-rail", Boolean(portrait));
     items.slice(0, 36).forEach(function (title) { fragment.appendChild(createCard(title, portrait)); });
     track.replaceChildren(fragment);
     var count = $(".rail-heading span", track.closest(".rail"));
