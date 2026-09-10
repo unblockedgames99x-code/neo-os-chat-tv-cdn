@@ -246,20 +246,16 @@
   function rowsFor(view) {
     var data = currentData();
     var items = allowedCatalog();
-    if (view === "movies") return [{ title: "NEO movies", items: items.filter(function (item) { return item.type === "movie"; }) }].concat(liveRows);
-    if (view === "series") return [{ title: "NEO series", items: items.filter(function (item) { return item.type === "series"; }) }, { title: "Discover series", tvmaze: true }];
-    if (view === "anime") return [{ title: "Anime library", items: items.filter(function (item) { return item.type === "anime"; }) }];
-    if (view === "manga") return [{ title: "Manga library", items: items.filter(function (item) { return item.type === "manga"; }), portrait: true }];
-    if (view === "list") return [{ title: "My List", items: items.filter(function (item) { return data.list.indexOf(item.id) !== -1; }) }];
+    if (view === "movies") return liveRows;
+    if (view === "series") return [{ title: "Discover series", tvmaze: true }];
+    if (view === "anime") return [{ title: "Anime", items: [], emptyMessage: "No verified anime titles are available yet." }];
+    if (view === "manga") return [{ title: "Manga", items: [], portrait: true, emptyMessage: "No verified manga titles are available yet." }];
+    if (view === "list") return [{ title: "My List", items: items.filter(function (item) { return data.list.indexOf(item.id) !== -1; }), emptyMessage: "Your list is empty." }];
     var progressItems = Object.keys(data.progress).map(function (id) { return items.find(function (item) { return item.id === id; }); }).filter(Boolean);
     return [
       { title: "Continue watching", items: progressItems },
-      { title: "Trending now", items: items.slice(0, 12) },
-      { title: "Only on NEO", items: items.filter(function (item) { return item.rating >= 8.4; }) },
       { title: "Movies", items: items.filter(function (item) { return item.type === "movie"; }).slice(0, 12) },
-      { title: "Series", items: items.filter(function (item) { return item.type === "series"; }).slice(0, 12) },
-      { title: "Anime", items: items.filter(function (item) { return item.type === "anime"; }).slice(0, 12) },
-      { title: "Manga", items: items.filter(function (item) { return item.type === "manga"; }).slice(0, 12), portrait: true }
+      { title: "Series", items: items.filter(function (item) { return item.type === "series"; }).slice(0, 12) }
     ].filter(function (row) { return row.items.length; }).concat(liveRows.slice(0, 3));
   }
 
@@ -292,7 +288,15 @@
     section.innerHTML = '<div class="rail-heading"><h2></h2><span>LOADING</span></div><div class="rail-track"></div>';
     $("h2", section).textContent = row.title;
     var track = $(".rail-track", section);
-    if (row.items) renderCards(track, row.items, Boolean(row.portrait));
+    if (row.items) {
+      renderCards(track, row.items, Boolean(row.portrait));
+      if (!row.items.length && row.emptyMessage) {
+        var empty = document.createElement("p");
+        empty.className = "rail-error";
+        empty.textContent = row.emptyMessage;
+        track.appendChild(empty);
+      }
+    }
     else {
       section.dataset.live = row.endpoint || (row.tvmaze ? "tvmaze" : "");
       track.innerHTML = '<div class="rail-skeleton"></div><div class="rail-skeleton"></div><div class="rail-skeleton"></div>';
@@ -347,7 +351,7 @@
     $$(".nav-button[data-view]").forEach(function (button) { button.classList.toggle("is-active", button.dataset.view === view); });
     $("[data-search]").value = "";
     $("[data-search-results]").hidden = true;
-    $("[data-hero]").hidden = view === "list" || view === "manga";
+    $("[data-hero]").hidden = true;
     var rails = $("[data-rails]");
     rails.hidden = false;
     rails.replaceChildren();
@@ -364,7 +368,12 @@
         if (view === "anime") return title.type === "anime";
         return title.type !== "manga";
       });
-      setHero(featured[0]);
+      if (featured.length) {
+        $("[data-hero]").hidden = false;
+        setHero(featured[0]);
+      } else {
+        activeTitle = null;
+      }
       if (getSettings().autoplayPreview && featured.length > 1) {
         var index = 0;
         heroTimer = window.setInterval(function () {
@@ -491,7 +500,7 @@
     if (!query) {
       section.hidden = true;
       $("[data-rails]").hidden = false;
-      $("[data-hero]").hidden = currentView === "list" || currentView === "manga";
+      $("[data-hero]").hidden = currentView === "list" || currentView === "manga" || !activeTitle;
       return;
     }
     section.hidden = false; $("[data-rails]").hidden = true; $("[data-hero]").hidden = true;
