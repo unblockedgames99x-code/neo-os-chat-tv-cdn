@@ -3428,6 +3428,54 @@
       height: 20px
     }
 
+    .dm-quick-start {
+      display: grid;
+      gap: 4px;
+      padding: 6px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--blo)
+    }
+
+    .dm-quick-start label {
+      font-size: 10px;
+      font-weight: bold;
+      color: var(--txt2)
+    }
+
+    .dm-quick-start-row {
+      display: flex;
+      gap: 4px
+    }
+
+    .dm-quick-start-row input {
+      flex: 1;
+      min-width: 0;
+      font-size: 11px
+    }
+
+    .dm-quick-status {
+      min-height: 12px;
+      margin: 0;
+      font-size: 9px;
+      color: var(--txt3)
+    }
+
+    .dm-friend-open {
+      min-width: 0;
+      padding: 0;
+      text-align: left;
+      color: inherit;
+      background: transparent;
+      border: 0;
+      cursor: pointer
+    }
+
+    .dm-friend-open:hover .frname,
+    .dm-friend-open:focus-visible .frname {
+      color: var(--acc2);
+      text-decoration: underline
+    }
+
     #renameroom-modal {
       position: fixed;
       inset: 0;
@@ -4279,7 +4327,7 @@ img.coin {
                     onclick="switchFSubTab('friends')">FRIENDS</div>
                   <div id="fsubtab-dms"
                     style="flex:1;text-align:center;font-size:10px;padding:2px;cursor:pointer;background:var(--bg3);color:var(--txt3);border-right:1px solid var(--blo);position:relative"
-                    onclick="switchFSubTab('dms')">INBOX<span id="dm-inbox-badge"
+                    onclick="switchFSubTab('dms')">DMS<span id="dm-inbox-badge"
                       style="display:none;position:absolute;top:1px;right:3px;background:var(--dan2);color:#fff;font-size:8px;border-radius:2px;padding:0 3px;min-width:12px;text-align:center">0</span>
                   </div>
                   <div id="fsubtab-requests"
@@ -4303,6 +4351,14 @@ img.coin {
                 </div>
 
                 <div id="fsubpanel-dms" style="flex:1;overflow-y:auto;display:none;flex-direction:column">
+                  <form class="dm-quick-start" onsubmit="event.preventDefault();startDMByUsername()">
+                    <label for="dm-start-user">New direct message</label>
+                    <div class="dm-quick-start-row">
+                      <input type="text" id="dm-start-user" placeholder="Type a username..." maxlength="20" autocomplete="off">
+                      <button type="submit" class="btn btnsm btna" id="dm-start-button">Message</button>
+                    </div>
+                    <p class="dm-quick-status" id="dm-start-status" role="status" aria-live="polite"></p>
+                  </form>
                   <div class="friends-search-bar">
                     <input type="text" id="dminbox-search" placeholder="Search conversations..."
                       oninput="filterDMInbox(this.value)">
@@ -7453,6 +7509,31 @@ const firebaseConfig = {
         });
       } catch (e) { L.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--txt3)">Could not load DMs.</div>'; }
     }
+    async function startDMByUsername() {
+      const input = document.getElementById('dm-start-user');
+      const button = document.getElementById('dm-start-button');
+      const status = document.getElementById('dm-start-status');
+      const username = String(input?.value || '').trim().replace(/^@+/, '').toLowerCase();
+      if (!CU) { status.textContent = 'Sign in to start a DM.'; return; }
+      if (!username) { status.textContent = 'Type a username.'; input?.focus(); return; }
+      button.disabled = true;
+      status.textContent = 'Finding @' + username + '...';
+      try {
+        const snap = await db.collection('users').where('username', '==', username).limit(1).get();
+        if (!snap || snap.empty) { status.textContent = 'User not found.'; return; }
+        const doc = snap.docs[0];
+        const user = doc.data() || {};
+        const uid = user.uid || doc.id;
+        if (uid === CU.uid) { status.textContent = 'That is your username.'; return; }
+        input.value = '';
+        status.textContent = '';
+        await openDMChecked(uid, user.name || user.username || username, user.photoB64 || null);
+      } catch (e) {
+        status.textContent = e && e.message ? e.message : 'Could not open that DM.';
+      } finally {
+        button.disabled = false;
+      }
+    }
     function updateDMInboxBadge() {
       const total = Object.values(dmUnreadMap).reduce((a, b) => a + b, 0);
       const badge = document.getElementById('dm-inbox-badge');
@@ -7570,11 +7651,11 @@ const firebaseConfig = {
         const unread = Object.entries(dmUnreadMap).filter(([k]) => k.includes(fuid)).reduce((a, [, b]) => a + b, 0);
         const row = document.createElement('div'); row.className = 'frow'; row.dataset.uid = fuid;
         row.innerHTML = `<div class="frav" onclick="showProfile(event,'${fuid}')">${av}</div>
-      <div class="finfo" onclick="showProfile(event,'${fuid}')">
+      <button type="button" class="finfo dm-friend-open" onclick="openDMChecked('${fuid}','${ea(name)}','${ea(photo || '')}')" title="Message ${ea(displayName)}">
         <div class="frname" id="frname-${fuid}">${eh(displayName)}${roleBadgeHtml(username, fuid)}${nick ? `<span class="friend-nick" onclick="event.stopPropagation();editNickname('${fuid}','${ea(nick)}')" title="Edit nickname"><img class="pixi" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAe9QTFRFAAAAOQQuZwxSnhRg0CRw9jN0qiuR/GeM/7PEAAAAOQQFZgsgmRM/rCRnzSFB9TxA/3d6/6aLGBgYKioqOjo6QUFBSUlJVlZWbW1tmZmZXl5egoKCmpqaubm5z8/P5+fn////dS0msCIQ4lYh84Io/J41/8dmOBQPVCIadTEm/9on//Fk//epLwoDTxsKk0Ya5XkZ8KwlCiYYE0AjG1gtHns1KbA7R9ZSevN5I2dRHA9ACClJDjxbDFJ4FXyqG57TF77cKPDigf/vMxl+SCK2OEr5VXH/g6P/FRsmMDs+TVZZYWtvj5ydtL2+7fHzTC0IXEMIelwKlH4YzLVI7tp6//m34C5ANwQ5VBoaILkwK9kuT/Y+7a818849//o0axOZQDTUpxzK1zz1/GJm3ZI5Hpwvaoj/TwtmjBi0s8z/cC8Ss2QmmHtWs5Nj1phC07Nz8NWG/++htf/wICslOCohSTkrOEk+dVxDTWVUcY14pbmn1+LYN3vT+fnfazDE72n//6X6/+b+PyYlUjQwg1NLvot53KmR9cqu/+jT//nz1lAW/8/B7bdZ88x5+dySf39/OA8UsEMkyj5R8PDwJhYVVR4AejcSlkMWxm8r4ptM/+LD3to9/+ewl/9zzf+f//rdmzUd/YunHGoxcCSs1dnaVbE0aQAAAKV0Uk5TAP//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////Cv2L1AAAAGdJREFUGJVNzlEOwzAIA1AODLIj1fL1N2i34j8/ESsRHduW4h8TJKgNxVoQQqFWj5C9u0Wi3lWfc3omtbqXDBwSz6555knDnJgt1AsgKQlA5jWfGkEf1EDiTuUNocyqqvz1COl68m0f2TtJZG6cRPQAAAAASUVORK5CYII="></span>` : ''}</div>
         <div class="frhandle" id="frhandle-${fuid}">${nick ? `<span style="color:var(--txt3)">${eh(name)}</span>` : (username ? '@' + eh(username) : '')}</div>
         <div class="frstatus" id="fstatus-${fuid}"></div>
-      </div>
+      </button>
       <span id="fdot-${fuid}" class="online-dot dot-offline" title="Offline"></span>
       <div class="fr-actions">
         ${unread ? `<span class="dm-badge">${unread}</span>` : ''}
