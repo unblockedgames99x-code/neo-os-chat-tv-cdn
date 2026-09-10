@@ -20,22 +20,13 @@
   var activeResumeAt = 0;
   var playerLoadId = 0;
   var profileAvatars = [
-    { id: "robot-blue", label: "Blue robot", x: 0, y: 0 },
-    { id: "monster-red", label: "Red creature", x: 33.333, y: 0 },
-    { id: "cat-yellow", label: "Yellow cat", x: 66.667, y: 0 },
-    { id: "dinosaur-green", label: "Green dinosaur", x: 100, y: 0 },
-    { id: "astronaut-purple", label: "Purple astronaut", x: 0, y: 33.333 },
-    { id: "fox-orange", label: "Orange fox", x: 33.333, y: 33.333 },
-    { id: "ghost-cyan", label: "Cyan ghost", x: 66.667, y: 33.333 },
-    { id: "alien-pink", label: "Pink alien", x: 100, y: 33.333 },
-    { id: "penguin-navy", label: "Navy penguin", x: 0, y: 66.667 },
-    { id: "monster-lime", label: "Lime one-eyed creature", x: 33.333, y: 66.667 },
-    { id: "bear-brown", label: "Brown bear", x: 66.667, y: 66.667 },
-    { id: "helmet-silver", label: "Silver space helmet", x: 100, y: 66.667 },
-    { id: "dog-turquoise", label: "Turquoise dog", x: 0, y: 100 },
-    { id: "unicorn-magenta", label: "Magenta unicorn", x: 33.333, y: 100 },
-    { id: "octopus-teal", label: "Teal octopus", x: 66.667, y: 100 },
-    { id: "pixel-orange", label: "Orange arcade creature", x: 100, y: 100 }
+    { id: "netflix-red", label: "Red classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABakRc13qnznu9gXCjeNTetIpWLBYv1BHtjenkcA2UPHsk_oKNyiEjMqDg5JrLMa6B-Ynairtq2_fSFPjKJ6mqB2xuIeeCZm23A.png?r=e6e" },
+    { id: "netflix-charcoal", label: "Charcoal classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABTfUlmnFRKf_OEUhru2aqso39FKxONTd5Dt_sWnNj5wAg4bbMBZ8sgZupTfnB9IQ8tmWcrzRiyZsCp1bLKb_n7VrnTw3_Ovw7Q.png?r=bd7" },
+    { id: "netflix-yellow", label: "Yellow classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABelkMs-h2DXUYbzHHCaFQo7ykBvO6JoCssR5azSK1jNcUTRExSzh9R1HNbNbWzIhTri5iN8U3N9GSmbXeLASZqL5IKRHLri1PA.png?r=1d4" },
+    { id: "netflix-green", label: "Green classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABXan2ftdVhTtVVzZctW_PhUGLw-uzzdXn1BaTkNyVzJQk62yuNZpVU0_GUBJu9X6ry23mg6k7-C11lblVvDFot41ZZ6dxcZoFw.png?r=a4b" },
+    { id: "netflix-purple", label: "Purple classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABVhab2XqRI6ThDSR6UvGIb_4U4tDnYLNtsDTaZxg91Vj02LwK50_WVhohDm7wDZ_ncQP7D9EQo_iPdzQDCU7ulekO9gcgOMKDw.png?r=98e" },
+    { id: "netflix-pink", label: "Pink classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABedBXQ7LUp91euJT4qzL6i6X6ZK0DUt9o_tXOojv1XvPtAifsQWvcOd2Z6vFM7wdgXCo1m_DPiJTzInm0Lbo2oABEeAaAxOWJQ.png?r=54c" },
+    { id: "netflix-blue", label: "Blue classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABXh10ggeTTdhZO1JIH_SNQ4gp0vsNnWfE8Mg2ckwzGvUzJMRpPFCujRK3Ex5K9VbkIyvUHQ92LBVdsemkj6zlpquL-qWMCNKeg.png?r=229" }
   ];
   try { requestedView = new URLSearchParams(location.search).get("view") || ""; } catch (error) {}
   var initialView = ["home", "movies", "series", "anime", "manga", "list"].indexOf(requestedView) !== -1 ? requestedView : "home";
@@ -66,8 +57,17 @@
     var avatar = profileAvatar(profile);
     node.textContent = "";
     node.classList.add("has-profile-picture");
-    node.style.setProperty("--avatar-x", avatar.x + "%");
-    node.style.setProperty("--avatar-y", avatar.y + "%");
+    var image = document.createElement("img");
+    image.src = avatar.src;
+    image.alt = "";
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.referrerPolicy = "no-referrer";
+    image.addEventListener("error", function () {
+      node.classList.remove("has-profile-picture");
+      node.textContent = initials(profile && profile.name || avatar.label);
+    }, { once: true });
+    node.appendChild(image);
     node.setAttribute("aria-hidden", "true");
   }
   function renderAvatarPicker(selectedId) {
@@ -97,7 +97,7 @@
   function profiles() {
     var list = read(profileKey, null);
     if (!Array.isArray(list) || !list.length) {
-      list = [{ id: "guest", name: "Guest", color: "#77d5ff", avatar: "robot-blue", kids: false }];
+      list = [{ id: "guest", name: "Guest", color: "#77d5ff", avatar: "netflix-blue", kids: false }];
       save(profileKey, list);
     }
     return list.slice(0, 6);
@@ -191,7 +191,7 @@
       id: profileEditingId || uid(),
       name: clean(form.elements.name.value).slice(0, 18) || "Profile",
       color: form.elements.color.value || "#77d5ff",
-      avatar: profileAvatars.some(function (avatar) { return avatar.id === form.elements.avatar.value; }) ? form.elements.avatar.value : "robot-blue",
+      avatar: profileAvatars.some(function (avatar) { return avatar.id === form.elements.avatar.value; }) ? form.elements.avatar.value : "netflix-blue",
       kids: form.elements.kids.checked
     };
     var index = list.findIndex(function (item) { return item.id === value.id; });
