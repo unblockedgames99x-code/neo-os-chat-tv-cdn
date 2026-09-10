@@ -9,9 +9,10 @@
   <script src="../neo-app-theme.js?v=20260907-theme-system-v2"></script>
   <link rel="stylesheet" href="../neo-theme-system.css?v=20260907-theme-system-v2">
   <link rel="stylesheet" href="../neo-fonts.css?v=20260906-select-contrast-v2">
-  <link rel="stylesheet" href="./app.css?v=20260910-media-sections-v1">
+  <link rel="preload" href="./assets/profile-avatars-v1.webp" as="image" type="image/webp">
+  <link rel="stylesheet" href="./app.css?v=20260910-profile-pictures-v1">
   <script defer src="./catalog.js?v=20260910-media-sections-v1"></script>
-  <script defer src="./app.js?v=20260910-media-sections-v1"></script>
+  <script defer src="./app.js?v=20260910-profile-pictures-v1"></script>
 </head>
 <body>
   <div class="app-shell" data-app-shell hidden>
@@ -93,7 +94,8 @@
       <button class="close" value="cancel" aria-label="Close">×</button>
       <span class="eyebrow">PROFILE</span><h2 data-profile-dialog-title>Add profile</h2>
       <label>Name<input name="name" maxlength="18" autocomplete="off" required placeholder="Profile name"></label>
-      <label>Color<select name="color"><option value="#77d5ff">Sky</option><option value="#ff5f75">Coral</option><option value="#b796ff">Violet</option><option value="#62e6a6">Mint</option><option value="#ffc25a">Amber</option></select></label>
+      <fieldset class="profile-picture-fieldset"><legend>Profile picture</legend><input type="hidden" name="avatar" value="robot-blue"><div class="profile-picture-picker" data-profile-picture-picker role="group" aria-label="Choose a profile picture"></div></fieldset>
+      <label>Profile color<select name="color"><option value="#77d5ff">Sky</option><option value="#ff5f75">Coral</option><option value="#b796ff">Violet</option><option value="#62e6a6">Mint</option><option value="#ffc25a">Amber</option></select></label>
       <label class="check"><input type="checkbox" name="kids"> Kids profile</label>
       <div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button value="save" class="primary" data-profile-save>Save</button></div>
     </form>

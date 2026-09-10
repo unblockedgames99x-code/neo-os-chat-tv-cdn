@@ -13,6 +13,24 @@
   var saveProgressAt = 0;
   var heroTimer = 0;
   var requestedView = "";
+  var profileAvatars = [
+    { id: "robot-blue", label: "Blue robot", x: 0, y: 0 },
+    { id: "monster-red", label: "Red creature", x: 33.333, y: 0 },
+    { id: "cat-yellow", label: "Yellow cat", x: 66.667, y: 0 },
+    { id: "dinosaur-green", label: "Green dinosaur", x: 100, y: 0 },
+    { id: "astronaut-purple", label: "Purple astronaut", x: 0, y: 33.333 },
+    { id: "fox-orange", label: "Orange fox", x: 33.333, y: 33.333 },
+    { id: "ghost-cyan", label: "Cyan ghost", x: 66.667, y: 33.333 },
+    { id: "alien-pink", label: "Pink alien", x: 100, y: 33.333 },
+    { id: "penguin-navy", label: "Navy penguin", x: 0, y: 66.667 },
+    { id: "monster-lime", label: "Lime one-eyed creature", x: 33.333, y: 66.667 },
+    { id: "bear-brown", label: "Brown bear", x: 66.667, y: 66.667 },
+    { id: "helmet-silver", label: "Silver space helmet", x: 100, y: 66.667 },
+    { id: "dog-turquoise", label: "Turquoise dog", x: 0, y: 100 },
+    { id: "unicorn-magenta", label: "Magenta unicorn", x: 33.333, y: 100 },
+    { id: "octopus-teal", label: "Teal octopus", x: 66.667, y: 100 },
+    { id: "pixel-orange", label: "Orange arcade creature", x: 100, y: 100 }
+  ];
   try { requestedView = new URLSearchParams(location.search).get("view") || ""; } catch (error) {}
   var initialView = ["home", "movies", "series", "anime", "manga", "list"].indexOf(requestedView) !== -1 ? requestedView : "home";
   var currentView = initialView;
@@ -29,10 +47,51 @@
   function clean(value) { return String(value || "").replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").trim(); }
   function initials(name) { return clean(name).split(/\s+/).slice(0, 2).map(function (part) { return part[0] || ""; }).join("").toUpperCase() || "N"; }
   function uid() { return "p-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function profileAvatar(profile) {
+    var selected = profileAvatars.find(function (avatar) { return avatar.id === String(profile && profile.avatar || ""); });
+    if (selected) return selected;
+    var seed = String(profile && (profile.id || profile.name) || "guest");
+    var hash = 0;
+    for (var index = 0; index < seed.length; index += 1) hash = (hash * 31 + seed.charCodeAt(index)) | 0;
+    return profileAvatars[Math.abs(hash) % profileAvatars.length];
+  }
+  function paintProfileAvatar(node, profile) {
+    if (!node) return;
+    var avatar = profileAvatar(profile);
+    node.textContent = "";
+    node.classList.add("has-profile-picture");
+    node.style.setProperty("--avatar-x", avatar.x + "%");
+    node.style.setProperty("--avatar-y", avatar.y + "%");
+    node.setAttribute("aria-hidden", "true");
+  }
+  function renderAvatarPicker(selectedId) {
+    var host = $("[data-profile-picture-picker]");
+    if (!host) return;
+    host.replaceChildren();
+    profileAvatars.forEach(function (avatar) {
+      var button = document.createElement("button");
+      var preview = document.createElement("span");
+      button.type = "button";
+      button.className = "profile-picture-choice";
+      button.dataset.avatar = avatar.id;
+      button.title = avatar.label;
+      button.setAttribute("aria-label", "Use " + avatar.label + " picture");
+      button.setAttribute("aria-pressed", avatar.id === selectedId ? "true" : "false");
+      preview.className = "profile-picture-preview";
+      paintProfileAvatar(preview, { avatar: avatar.id, id: avatar.id });
+      button.appendChild(preview);
+      button.addEventListener("click", function () {
+        var form = $("[data-profile-form]");
+        form.elements.avatar.value = avatar.id;
+        $$("[data-avatar]", host).forEach(function (choice) { choice.setAttribute("aria-pressed", choice === button ? "true" : "false"); });
+      });
+      host.appendChild(button);
+    });
+  }
   function profiles() {
     var list = read(profileKey, null);
     if (!Array.isArray(list) || !list.length) {
-      list = [{ id: "guest", name: "Guest", color: "#77d5ff", kids: false }];
+      list = [{ id: "guest", name: "Guest", color: "#77d5ff", avatar: "robot-blue", kids: false }];
       save(profileKey, list);
     }
     return list.slice(0, 6);
@@ -69,7 +128,7 @@
       button.className = "profile";
       button.style.setProperty("--profile", profile.color || "#77d5ff");
       button.innerHTML = '<span class="profile-avatar"></span><strong></strong><small></small>';
-      $(".profile-avatar", button).textContent = initials(profile.name);
+      paintProfileAvatar($(".profile-avatar", button), profile);
       $("strong", button).textContent = profile.name;
       $("small", button).textContent = profile.kids ? "KIDS" : "PROFILE";
       button.addEventListener("click", function () { managing ? openProfileDialog(profile) : chooseProfile(profile); });
@@ -109,7 +168,9 @@
     var form = $("[data-profile-form]");
     form.elements.name.value = profile ? profile.name : "";
     form.elements.color.value = profile ? profile.color : "#77d5ff";
+    form.elements.avatar.value = profileAvatar(profile || { id: profileEditingId || "new-profile" }).id;
     form.elements.kids.checked = Boolean(profile && profile.kids);
+    renderAvatarPicker(form.elements.avatar.value);
     $("[data-profile-dialog-title]").textContent = profile ? "Edit profile" : "Add profile";
     $("[data-profile-dialog]").showModal();
     requestAnimationFrame(function () { form.elements.name.focus(); });
@@ -124,6 +185,7 @@
       id: profileEditingId || uid(),
       name: clean(form.elements.name.value).slice(0, 18) || "Profile",
       color: form.elements.color.value || "#77d5ff",
+      avatar: profileAvatars.some(function (avatar) { return avatar.id === form.elements.avatar.value; }) ? form.elements.avatar.value : "robot-blue",
       kids: form.elements.kids.checked
     };
     var index = list.findIndex(function (item) { return item.id === value.id; });
@@ -137,7 +199,7 @@
     activeProfile = profile;
     try { sessionStorage.setItem(sessionKey, profile.id); } catch (error) {}
     document.documentElement.style.setProperty("--profile", profile.color || "#77d5ff");
-    $("[data-profile-avatar]").textContent = initials(profile.name);
+    paintProfileAvatar($("[data-profile-avatar]"), profile);
     $("[data-profile-name]").textContent = profile.name;
     $("[data-profile-gate]").hidden = true;
     $("[data-app-shell]").hidden = false;
