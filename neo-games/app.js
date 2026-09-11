@@ -181,6 +181,14 @@
     window.scrollTo({ top: 0, behavior: "auto" });
   }
 
+  function getFrameLoader() {
+    if (window.NEOFrameLoader) return window.NEOFrameLoader;
+    try {
+      if (window.parent && window.parent !== window && window.parent.NEOFrameLoader) return window.parent.NEOFrameLoader;
+    } catch (_error) {}
+    return null;
+  }
+
   function openGame(game) {
     if (!game || !game.file) return;
     activeGame = game;
@@ -195,10 +203,17 @@
     status.classList.remove("is-ready");
     status.textContent = "Loading " + game.name + "…";
     player.hidden = false;
-    frame.src = game.file;
     frame.addEventListener("load", function loaded() {
       frame.removeEventListener("load", loaded);
       status.classList.add("is-ready");
+    });
+    var loader = getFrameLoader();
+    var loadPromise = loader
+      ? loader.load(frame, game.file, { forceFetch: true, cache: "force-cache" })
+      : Promise.resolve().then(function () { frame.src = game.file; });
+    loadPromise.catch(function () {
+      status.classList.remove("is-ready");
+      status.textContent = "This game could not be loaded. Try again.";
     });
     frameTimer = window.setTimeout(function () {
       if (!status.classList.contains("is-ready")) status.textContent = "Still loading… larger games can take a moment.";
@@ -207,6 +222,8 @@
   function closeGame() {
     clearTimeout(frameTimer);
     var frame = $("[data-game-frame]");
+    var loader = getFrameLoader();
+    if (loader) loader.cancel(frame);
     frame.src = "about:blank";
     $("[data-player]").hidden = true;
   }
@@ -285,6 +302,13 @@
       searchTimer = window.setTimeout(function () { query ? renderLibrary(true) : setMode(mode); }, 120);
     });
     $("[data-player-close]").addEventListener("click", closeGame);
+    $("[data-player-open]").addEventListener("click", function (event) {
+      event.preventDefault();
+      if (!activeGame) return;
+      var loader = getFrameLoader();
+      if (loader) loader.open(activeGame.file).catch(function () {});
+      else window.open(activeGame.file, "_blank", "noopener,noreferrer");
+    });
     $("[data-player-fullscreen]").addEventListener("click", function () {
       var player = $("[data-player]");
       if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
