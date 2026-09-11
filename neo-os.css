@@ -52,6 +52,10 @@
   box-sizing: border-box;
 }
 
+img:not(.pixi):not(.pixel-art) {
+  image-rendering: auto !important;
+}
+
 html,
 body {
   width: 100%;
@@ -162,13 +166,14 @@ button:disabled {
     visibility 0s linear 220ms;
 }
 
-.boot-screen-image {
+.boot-screen-video {
   position: absolute;
+  z-index: 1;
   inset: 0;
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
   background: #ffffff;
   user-select: none;
@@ -177,10 +182,10 @@ button:disabled {
 
 .boot-screen-copy {
   position: absolute;
-  z-index: 1;
-  left: 66%;
+  z-index: 0;
+  left: 50%;
   top: 50%;
-  width: min(30vw, 480px);
+  width: min(72vw, 520px);
   display: grid;
   gap: 12px;
   color: #101010;
@@ -231,7 +236,7 @@ button:disabled {
 @media (max-width: 700px) {
   .boot-screen-copy {
     left: 50%;
-    top: 72%;
+    top: 50%;
     width: min(78vw, 360px);
     justify-items: center;
     text-align: center;

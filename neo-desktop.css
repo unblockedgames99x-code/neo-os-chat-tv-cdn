@@ -123,6 +123,57 @@ html[data-desktop-motion=reduced] *,html[data-reduce-motion=true] *{animation:no
   margin-top: 10px;
 }
 
+.neo-skin[data-skin-type="music"] .skin-media-now {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.neo-skin[data-skin-type="music"] .skin-media-artwork {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(46px, calc(54px * var(--skin-scale, 1)), 86px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  color: color-mix(in srgb, currentColor 80%, var(--desktop-accent));
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 12px;
+}
+
+.neo-skin[data-skin-type="music"] .skin-media-artwork-icon,
+.neo-skin[data-skin-type="music"] .skin-media-cover {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+}
+
+.neo-skin[data-skin-type="music"] .skin-media-artwork-icon {
+  box-sizing: border-box;
+  padding: 24%;
+}
+
+.neo-skin[data-skin-type="music"] .skin-media-cover {
+  display: block;
+  object-fit: cover;
+  background: var(--skin-background, var(--desktop-surface));
+}
+
+.neo-skin[data-skin-type="music"] .skin-media-copy {
+  min-width: 0;
+}
+
+.neo-skin[data-skin-type="music"] .skin-media-copy b,
+.neo-skin[data-skin-type="music"] .skin-media-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .neo-skin[data-skin-type="music"] .skin-content .skin-media-control {
   display: inline-grid;
   place-items: center;

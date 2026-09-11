@@ -353,9 +353,9 @@
   text-shadow: none;
 }
 
-/* Narrow sci-fi glyph skin based on luminous weekday Rainmeter lettering. */
+/* Thin sci-fi weekday lettering based on the original desktop reference. */
 .rainmeter-clock[data-rainmeter-ready="true"][data-rainmeter-style="glyph"] {
-  width: min(540px, calc(100vw - 24px));
+  width: min(680px, calc(100vw - 24px));
   display: grid;
   justify-items: center;
   padding: 0;
@@ -373,31 +373,36 @@
 }
 
 .rainmeter-clock[data-rainmeter-style="glyph"] .rainmeter-weekday {
-  display: block;
-  width: max-content;
+  display: flex;
+  justify-content: center;
+  gap: clamp(8px, 1vw, 16px);
+  width: 100%;
   max-width: 100%;
   margin: 0;
   color: var(--rainmeter-color);
-  font-family: "Arial Unicode MS", "Segoe UI Symbol", "Noto Sans Symbols", sans-serif;
-  font-size: clamp(25px, 2.6vw, 34px);
-  font-weight: 700;
-  line-height: .9;
-  letter-spacing: .06em;
+  font-family: "NEO Weekday", "Century Gothic", "Avenir Next", sans-serif;
+  font-size: clamp(42px, 5.2vw, 74px);
+  font-weight: 400;
+  line-height: .86;
+  letter-spacing: 0;
   white-space: nowrap;
-  -webkit-text-stroke: .35px color-mix(in srgb, var(--rainmeter-color) 72%, transparent);
+  -webkit-text-stroke: 0 transparent;
 }
 
 .rainmeter-clock[data-rainmeter-style="glyph"] .rainmeter-weekday span {
-  display: none;
+  display: block;
+  min-width: .62em;
+  font: inherit;
+  text-align: center;
 }
 
 .rainmeter-clock[data-rainmeter-style="glyph"] .rainmeter-weekday::after {
-  content: attr(data-rainmeter-glyph-day);
+  content: none;
 }
 
 .rainmeter-clock[data-rainmeter-style="glyph"][data-rainmeter-shadow="true"] .rainmeter-weekday {
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .88)) drop-shadow(0 0 5px color-mix(in srgb, var(--rainmeter-color) 34%, transparent));
-  text-shadow: 0 0 4px color-mix(in srgb, var(--rainmeter-color) 46%, transparent);
+  filter: none;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, .52);
 }
 
 .rainmeter-clock[data-rainmeter-style="glyph"][data-rainmeter-shadow="false"] .rainmeter-weekday {
@@ -664,11 +669,11 @@
 .rainmeter-style-preview.is-glyph {
   color: var(--rainmeter-editor-main, #fff);
   background: none;
-  font-family: "Arial Unicode MS", "Segoe UI Symbol", sans-serif;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-shadow: 0 0 5px color-mix(in srgb, var(--rainmeter-editor-main, #fff) 42%, transparent);
+  font-family: "NEO Weekday", "Century Gothic", sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: .16em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .48);
 }
 
 .rainmeter-colors { display: flex; align-items: center; gap: 8px; }
@@ -844,7 +849,7 @@
   .rainmeter-clock[data-rainmeter-style="botanical"] .rainmeter-weekday { gap: .08em; font-size: clamp(34px, 9vw, 54px); }
   .rainmeter-clock[data-rainmeter-style="wheel"] { width: calc(100vw - 24px); }
   .rainmeter-clock[data-rainmeter-style="wheel"] .rainmeter-weekday { gap: .08em; font-size: clamp(29px, 9vw, 48px); }
-  .rainmeter-clock[data-rainmeter-style="glyph"] .rainmeter-weekday { font-size: clamp(25px, 8vw, 37px); letter-spacing: .05em; }
+  .rainmeter-clock[data-rainmeter-style="glyph"] .rainmeter-weekday { gap: clamp(5px, 1.8vw, 9px); font-size: clamp(32px, 10vw, 48px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

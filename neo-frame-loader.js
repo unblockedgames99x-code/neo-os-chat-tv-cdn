@@ -45,12 +45,12 @@
       );
     }
     var hasAssetBase = /<base\b[^>]*\bhref\s*=/i.test(html);
-    var adShieldRuntime = /<script\b[^>]*\bsrc\s*=\s*["'][^"']*neo-ad-shield\.js(?:[?#][^"']*)?["']/i.test(html)
-      ? ""
-      : '<script src="' + escapeAttribute(resolveUrl("./neo-ad-shield.js?v=20260910-sitewide-v1")) + '"><\/script>';
     var audioRuntime = !/\/music-(?:local|v2)\//i.test(sourceUrl)
       ? '<script src="' + escapeAttribute(resolveUrl("./neo-audio-spectrum-bridge.js?v=20260909-all-audio-v1")) + '"><\/script>'
       : "";
+    var adShieldRuntime = /<script\b[^>]*\bsrc\s*=\s*["'][^"']*neo-ad-shield\.js(?:[?#][^"']*)?["']/i.test(html)
+      ? ""
+      : '<script src="' + escapeAttribute(resolveUrl("./neo-ad-shield.js?v=20260910-sitewide-v1")) + '"><\/script>';
     var networkRuntime = "";
     if (
       isRunner() &&

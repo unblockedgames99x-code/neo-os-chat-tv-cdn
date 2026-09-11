@@ -14,8 +14,10 @@
   var WINDOW_STATE_KEY = "neo_os_window_states_v2";
   var DEFAULT_WINDOW_WIDTH = 1180;
   var DEFAULT_WINDOW_HEIGHT = 760;
+  var WINDOW_TOP_GAP = 8;
   var PINNED_APPS_KEY = "neo_os_pinned_apps_v1";
   var INSTALLED_APPS_KEY = "neo_os_installed_apps_v1";
+  var CUSTOM_APPS_KEY = "neo_os_custom_apps_v1";
   var BOOT_SESSION_KEY = "neo_os_booted_session";
   var GUEST_SESSION_KEY = "neo_os_guest_session_v1";
   var MUSIC_MODE_KEY = "neo_os_music_mode_v1";
@@ -149,7 +151,7 @@
   }
 
   var defaultSettings = {
-    designVersion: 16,
+    designVersion: 17,
     wallpaper: "we-steam-1403160205",
     wallpaperFavorites: [],
     wallpaperRecent: [],
@@ -185,7 +187,7 @@
     taskbarAccent: "#ffffff",
     reduceMotion: false,
     performanceMode: "normal",
-    autoPerformanceMode: true
+    autoPerformanceMode: false
   };
 
   var savedSettings = readJson(SETTINGS_KEY, {});
@@ -219,6 +221,9 @@
     savedSettings.dockMagnify = false;
     savedSettings.dockIconSize = "normal";
   }
+  if (savedDesignVersion < 17) {
+    savedSettings.autoPerformanceMode = false;
+  }
   savedSettings.performanceMode = normalizePerformanceMode(savedSettings.performanceMode);
   savedSettings.taskbarPosition = normalizeTaskbarPosition(savedSettings.taskbarPosition);
   savedSettings.taskbarStyle = normalizeTaskbarStyle(savedSettings.taskbarStyle);
@@ -246,7 +251,7 @@
   delete savedSettings.taskbarMaterial;
   delete savedSettings.taskbarOpacity;
   delete savedSettings.taskbarBlur;
-  savedSettings.designVersion = 16;
+  savedSettings.designVersion = 17;
   var settings = Object.assign({}, defaultSettings, savedSettings);
   var appliedTabAppearanceSignature = "";
   // Keep imported wallpapers and the local reactive scene. Remote workshop defaults
@@ -295,27 +300,12 @@
       category: "System",
       aliases: ["file explorer", "file manager", "downloads", "documents", "drive", "storage"]
     },
-    zones: {
-      id: "zones",
-      title: "Games",
-      subtitle: "Complete NEO game library",
-      icon: "html-games",
-      route: "./neo-games/index.html?v=20260910-games-v1",
-      keepAlive: false,
-      width: 1180,
-      height: 760,
-      launcher: true,
-      pinned: true,
-      core: true,
-      category: "Games",
-      aliases: ["html games", "games", "play", "arcade", "catalog", "zones"]
-    },
     chat: {
       id: "chat",
       title: "NEO Chat",
       subtitle: "Rooms, friends, forums, direct messages, and profiles",
       icon: "chat",
-      route: "./neo-chat/index.html?v=20260907-neo-chat-images-v2",
+      route: "./neo-chat/index.html?v=20260910-sharp-photos-v1",
       width: 1180,
       height: 760,
       launcher: true,
@@ -416,13 +406,14 @@
     }
   };
   Object.assign(apps, window.NEO_EXTRA_APPS || {});
+  restoreCustomApps(apps);
   if (localOnly) {
     apps.browser.route = localConfig.browser;
     apps.browser.subtitle = "Fast private tabs with automatic relay fallback";
     apps.browser.hideName = false;
     apps.browser.title = "Browser";
     apps.browser.accessibleName = "NEO Browser";
-    ["cinehd", "discord", "youtube-app", "geometry-dash", "neo-cloud", "report"].forEach(function (id) {
+    ["discord", "youtube-app", "geometry-dash", "neo-cloud", "report"].forEach(function (id) {
       if (!apps[id]) return;
       if (id === "report" && localConfig.support) {
         apps[id].route = localConfig.support;
@@ -443,14 +434,14 @@
     .filter(function (id) { return Object.prototype.hasOwnProperty.call(apps, id); }));
   Object.keys(apps).forEach(function (id) {
     var app = apps[id];
-    app.installed = !app.launcher || app.core || installedAppIds.has(id);
+    app.installed = !app.launcher || app.core || app.custom || installedAppIds.has(id);
     if (app.installed && app.launcher) installedAppIds.add(id);
   });
   writeJson(INSTALLED_APPS_KEY, Array.from(installedAppIds));
 
   var storedPinnedApps = readJson(PINNED_APPS_KEY, null);
   if (Array.isArray(storedPinnedApps) && storedPinnedApps.length && storedPinnedApps.indexOf("chat") === -1) {
-    var chatInsertAt = Math.max(0, storedPinnedApps.indexOf("zones") + 1);
+    var chatInsertAt = Math.max(0, storedPinnedApps.indexOf("files") + 1);
     storedPinnedApps.splice(chatInsertAt, 0, "chat");
   }
   if (Array.isArray(storedPinnedApps) && storedPinnedApps.length) {
@@ -464,6 +455,7 @@
   })).filter(function (id, index, ids) {
     return ids.indexOf(id) === index && apps[id] && apps[id].launcher;
   });
+  writeJson(PINNED_APPS_KEY, pinnedAppOrder);
 
   function readJson(key, fallback) {
     try {
@@ -480,6 +472,157 @@
     } catch (error) {
       showToast("Could not save locally", "Local storage may be unavailable.", "info");
     }
+  }
+
+  function normalizeCustomAppUrl(value) {
+    var source = String(value || "").trim();
+    if (!source) throw new TypeError("Enter the site URL.");
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(source)) source = "https://" + source;
+    var url;
+    try { url = new URL(source); } catch (error) { throw new TypeError("Enter a valid website URL."); }
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new TypeError("Only http and https websites can be installed.");
+    url.username = "";
+    url.password = "";
+    return url.href;
+  }
+
+  function safeCustomAppIcon(value) {
+    var source = String(value || "").trim();
+    if (!source || source.length > 350000) return "";
+    if (/^data:image\/(?:avif|gif|jpeg|png|svg\+xml|webp)(?:;[^,]*)?,/i.test(source)) return source;
+    try {
+      var url = new URL(source);
+      return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+    } catch (error) { return ""; }
+  }
+
+  function escapeAttribute(value) {
+    return String(value || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  }
+
+  function customAppRoute(url, mode) {
+    if (mode === "direct") return url;
+    var browserRoute = localConfig && localConfig.browser ? localConfig.browser : "./NEO-BROWSER/index.html";
+    try {
+      var route = new URL(browserRoute, document.baseURI);
+      route.searchParams.set("neo-app-mode", "1");
+      route.searchParams.set("neo-custom-app", "1");
+      route.searchParams.set("neo-app-target", url);
+      return route.href;
+    } catch (error) {
+      return browserRoute + (browserRoute.indexOf("?") === -1 ? "?" : "&") + "neo-app-mode=1&neo-custom-app=1&neo-app-target=" + encodeURIComponent(url);
+    }
+  }
+
+  function customAppDefinition(record) {
+    var id = String(record && record.id || "").replace(/[^a-z0-9_-]/gi, "");
+    var title = String(record && record.title || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 48);
+    if (!/^custom-app-[a-z0-9_-]+$/i.test(id) || !title) return null;
+    var url;
+    try { url = normalizeCustomAppUrl(record.url); } catch (error) { return null; }
+    var mode = record.mode === "direct" ? "direct" : "relay";
+    var icon = safeCustomAppIcon(record.icon) || "apps";
+    var host = "Website";
+    try { host = new URL(url).hostname.replace(/^www\./, "") || host; } catch (error) {}
+    return {
+      id: id,
+      title: title,
+      subtitle: host + (mode === "direct" ? " · Direct embed" : " · NEO relay"),
+      icon: icon,
+      route: customAppRoute(url, mode),
+      sourceUrl: url,
+      launchMode: mode,
+      keepAlive: false,
+      width: 1080,
+      height: 720,
+      launcher: true,
+      pinned: false,
+      custom: true,
+      category: "Installed",
+      aliases: [title, host, "custom app", "website"]
+    };
+  }
+
+  function customAppRecord(app) {
+    return { id: app.id, title: app.title, url: app.sourceUrl, icon: safeCustomAppIcon(app.icon), mode: app.launchMode, createdAt: app.createdAt || Date.now() };
+  }
+
+  function persistCustomApps() {
+    writeJson(CUSTOM_APPS_KEY, Object.keys(apps).map(function (id) { return apps[id]; }).filter(function (app) { return app && app.custom; }).map(customAppRecord));
+  }
+
+  function restoreCustomApps(registry) {
+    var records = readJson(CUSTOM_APPS_KEY, []);
+    if (!Array.isArray(records)) records = [];
+    var normalized = [];
+    records.slice(0, 80).forEach(function (record) {
+      var app = customAppDefinition(record);
+      if (!app || registry[app.id]) return;
+      app.createdAt = Number(record.createdAt) || Date.now();
+      registry[app.id] = app;
+      normalized.push(customAppRecord(app));
+    });
+    writeJson(CUSTOM_APPS_KEY, normalized);
+  }
+
+  function publicAppRecord(app) {
+    return {
+      id: app.id,
+      title: app.title,
+      subtitle: app.subtitle,
+      icon: app.icon,
+      category: app.category,
+      pinned: Boolean(app.pinned),
+      installed: Boolean(app.installed),
+      core: Boolean(app.core),
+      custom: Boolean(app.custom),
+      sourceUrl: app.custom ? app.sourceUrl : "",
+      launchMode: app.custom ? app.launchMode : "",
+      hideName: Boolean(app.hideName),
+      accessibleName: app.accessibleName || app.title
+    };
+  }
+
+  function installCustomApp(input) {
+    input = input && typeof input === "object" ? input : {};
+    var title = String(input.title || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 48);
+    if (!title) throw new TypeError("Enter an app name.");
+    var url = normalizeCustomAppUrl(input.url);
+    var icon = String(input.icon || "").trim();
+    if (icon && !safeCustomAppIcon(icon)) throw new TypeError("Use an http, https, or image-data icon.");
+    var id = "custom-app-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    while (apps[id]) id += "x";
+    var app = customAppDefinition({ id: id, title: title, url: url, icon: icon, mode: input.mode });
+    if (!app) throw new TypeError("This app could not be installed.");
+    app.createdAt = Date.now();
+    app.installed = true;
+    apps[id] = app;
+    installedAppIds.add(id);
+    hiddenDesktopShortcutIds.delete(id);
+    writeJson(INSTALLED_APPS_KEY, Array.from(installedAppIds));
+    persistCustomApps();
+    renderDock();
+    renderDesktopShortcuts();
+    renderLauncher();
+    return publicAppRecord(app);
+  }
+
+  function removeCustomApp(id) {
+    var app = apps[id];
+    if (!app || !app.custom) return false;
+    setAppInstalled(id, false);
+    delete apps[id];
+    delete desktopShortcutLayout[id];
+    delete windowStates[id];
+    hiddenDesktopShortcutIds.delete(id);
+    writeJson(DESKTOP_SHORTCUT_LAYOUT_KEY, desktopShortcutLayout);
+    writeJson(WINDOW_STATE_KEY, windowStates);
+    writeJson(DESKTOP_SHORTCUT_HIDDEN_KEY, Array.from(hiddenDesktopShortcutIds));
+    persistCustomApps();
+    renderDock();
+    renderDesktopShortcuts();
+    renderLauncher();
+    return true;
   }
 
   function escapeSelector(value) {
@@ -502,11 +645,13 @@
       "html-games": "./assets/html-games.svg?v=20260827-blue-controller-v1",
       "neo-cloud": "./assets/neo-cloud.svg?v=20260901-cloud-logo-v2",
       widgets: "./assets/widgets.svg?v=20260907-widgets-logo-v1",
-      zstream: "./assets/zstream.png?v=20260827-zstream-official-v1",
       discord: "./assets/discord-official.png?v=20260828-user-artwork-v2",
-      youtube: "./assets/youtube-official.webp?v=20260828-user-artwork-v1"
+      youtube: "./assets/youtube-official.webp?v=20260828-user-artwork-v1",
+      chatgpt: "./assets/neo-ai-logo.svg?v=20260910-chatgpt-white-v1"
     };
     if (imageIcons[name]) return '<img class="app-image-icon" src="' + imageIcons[name] + '" width="24" height="24" alt="">';
+    var customIcon = safeCustomAppIcon(name);
+    if (customIcon) return '<img class="app-image-icon" src="' + escapeAttribute(customIcon) + '" width="24" height="24" alt="">';
     return '<svg class="icon" aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
   }
 
@@ -868,7 +1013,8 @@
       playing: playing,
       paused: paused,
       volume: hasVolume ? volume : (nowPlayingState && nowPlayingState.source === source ? nowPlayingState.volume : 1),
-      volumeControl: hasVolume
+      volumeControl: hasVolume,
+      transport: detail.transport === true
     };
 
     nowPlayingWidget.hidden = false;
@@ -1150,7 +1296,8 @@
 
   function interfaceStyleScopeForApp(app) {
     if (!app) return "shell";
-    if (["browser", "stream", "chat", "cinehd", "discord", "youtube-app", "neo-cloud"].indexOf(app.id) !== -1) return "bridge";
+    if (app.custom && app.launchMode === "relay") return "bridge";
+    if (["browser", "stream", "chat", "discord", "youtube-app", "neo-cloud", "nowgg", "neo-ai"].indexOf(app.id) !== -1) return "bridge";
     if (["skins", "vscode", "terminal"].indexOf(app.id) !== -1) return "native";
     if (app.template || app.lazy || app.runtime) return "native";
     return "shell";
@@ -1158,10 +1305,11 @@
 
   function embeddedInterfaceStyleAppId(appId) {
     if (appId === "stream") return "music";
-    if (appId === "cinehd") return "tv";
     if (appId === "neo-cloud") return "cloud";
+    if (appId === "neo-ai") return "ai";
     if (appId === "chat") return "chat";
-    if (appId === "browser" || appId === "discord" || appId === "youtube-app") return "browser";
+    if (appId === "youtube-app") return "youtube";
+    if (appId === "browser" || appId === "discord" || appId === "nowgg") return "browser";
     return "app";
   }
 
@@ -1502,8 +1650,7 @@
         rainmeter.dataset.rainmeterYear = now.getFullYear() + ".";
       }
       if (rainmeterWeekday) {
-        var rainmeterGlyphs = { A: "卂", B: "乃", C: "匚", D: "ᗪ", E: "乇", F: "千", G: "Ꮆ", H: "卄", I: "丨", J: "ﾌ", K: "Ҝ", L: "ㄥ", M: "爪", N: "几", O: "ㄖ", P: "卩", Q: "Ɋ", R: "尺", S: "丂", T: "ㄒ", U: "ㄩ", V: "ᐯ", W: "山", X: "乂", Y: "ㄚ", Z: "乙" };
-        rainmeterWeekday.dataset.rainmeterGlyphDay = Array.from(dayName.toUpperCase()).map(function (letter) { return rainmeterGlyphs[letter] || letter; }).join("");
+        delete rainmeterWeekday.dataset.rainmeterGlyphDay;
         var weekdayLetters = document.createDocumentFragment();
         Array.from(dayName.toUpperCase()).forEach(function (letter) {
           var glyph = document.createElement("span");
@@ -2583,7 +2730,9 @@
       // Older records used viewport coordinates. New records are layer-relative.
       if (savedWindow.coordinates !== "layer") { if (savedWindow.left != null) left -= layerBounds.left; if (savedWindow.top != null) top -= layerBounds.top; }
       win.style.left = clamp(left, 0, Math.max(0, availableWidth - width)) + "px";
-      win.style.top = clamp(top, 0, Math.max(0, availableHeight - height)) + "px";
+      var maxTop = Math.max(0, availableHeight - height);
+      var minTop = maxTop >= WINDOW_TOP_GAP ? WINDOW_TOP_GAP : 0;
+      win.style.top = clamp(top, minTop, maxTop) + "px";
     }
     win.innerHTML =
       '<header class="window-chrome">' +
@@ -2642,12 +2791,12 @@
       if (!document.querySelector('link[data-neo-features]')) {
         var style = document.createElement("link");
         style.rel = "stylesheet";
-        style.href = "./neo-os-features.css?v=20260826-playlist-actions-v1&hover=bridge-v1";
+        style.href = "./neo-os-features.css?v=20260910-app-installer-v2&hover=bridge-v1";
         style.dataset.neoFeatures = "";
         document.head.appendChild(style);
       }
       var script = document.createElement("script");
-      script.src = "./neo-os-features.js?v=20260909-hide-all-icons-v1&hover=bridge-v1";
+      script.src = "./neo-os-features.js?v=20260910-app-installer-v2&hover=bridge-v1";
       script.async = true;
       script.onload = function () {
         if (!window.NEO_FEATURES) {
@@ -2698,7 +2847,7 @@
       var existing = document.getElementById("neo-browse-runtime-script");
       var script = existing || document.createElement("script");
       script.id = "neo-browse-runtime-script";
-      script.src = "./neo-browser-runtime.js?v=20260907-lively-tabs-v1";
+      script.src = "./neo-browser-runtime.js?v=20260910-nextnode-proxy-v1";
       script.async = true;
       script.onload = function () {
         if (!window.NEO_BROWSER_ENGINE) {
@@ -2856,6 +3005,16 @@
       if (event.source !== frame.contentWindow) return;
       if (!event.data) return;
       if (event.data.neoMusicUiReady === true) setRuntimeReady();
+      if (event.data.neoMusicLevels && Array.isArray(event.data.neoMusicLevels.values)) {
+        window.dispatchEvent(new CustomEvent("neo-media-levels", { detail: {
+          source: source,
+          active: true,
+          levels: event.data.neoMusicLevels.values,
+          measured: event.data.neoMusicLevels.measured === true,
+          bands: Math.max(0, Number(event.data.neoMusicLevels.bands) || 0),
+          interval: Math.max(0, Number(event.data.neoMusicLevels.interval) || 0)
+        }}));
+      }
       var detail = event.data.neoMusicState ||
         (event.data.type === "neo-local-music:state" ? event.data.state : null);
       if (!detail) return;
@@ -2906,7 +3065,6 @@
     }
     body.appendChild(template.content.cloneNode(true));
     syncSettingControls(body);
-    if (app.id === "zones") wireLibraryApp(body);
     if (app.id === "search") wireSearchApp(body);
     if (app.template === "browser-template") wireBrowserApp(body, app);
     if (app.id === "chat") wireMessagesApp(body);
@@ -4367,7 +4525,8 @@
   }
 
   function mountFrame(app, body) {
-    if (app.id === "browser" && location.protocol === "file:") {
+    var browserBacked = app.id === "browser" || Boolean(app.custom && app.launchMode === "relay");
+    if (browserBacked && location.protocol === "file:") {
       body.innerHTML = '<div class="feature-loader is-error" role="alert"><strong>Browser needs the NEO web runtime</strong><p>Tabs and website loading require the local secure context; they cannot run from a raw file.</p><a class="button primary" data-browser-runtime-link>Open working NEO OS</a></div>';
       var browserRuntimeLink = body.querySelector("[data-browser-runtime-link]");
       browserRuntimeLink.href = localConfig.preview || "http://127.0.0.1:3092/neo-os/";
@@ -4399,7 +4558,7 @@
     var frame = document.createElement("iframe");
     frame.title = app.title;
     frame.loading = "eager";
-    if (app.id === "browser") frame.setAttribute("fetchpriority", "high");
+    if (browserBacked) frame.setAttribute("fetchpriority", "high");
     frame.referrerPolicy = "same-origin";
     var frameSandbox = [
       "allow-same-origin",
@@ -4412,7 +4571,7 @@
     ];
     if (app.id !== "browser") frameSandbox.push("allow-modals");
     frame.sandbox = frameSandbox.join(" ");
-    frame.allow = "fullscreen; autoplay; picture-in-picture; gamepad; clipboard-read; clipboard-write";
+    frame.allow = "fullscreen; autoplay; picture-in-picture; gamepad; clipboard-read; clipboard-write; display-capture";
     frame.setAttribute("allowfullscreen", "");
     frame.dataset.route = app.route;
     body.append(loader, fallback, frame);
@@ -4451,7 +4610,7 @@
         return;
       }
       if (data.type !== "neo-shell:media-state") return;
-      var videoRoute = app.id === "youtube-app" || app.id === "browser";
+      var videoRoute = app.id === "youtube-app" || browserBacked;
       window.dispatchEvent(new CustomEvent("neo-media-state", {
         detail: {
           source: "route-media:" + app.id,
@@ -4497,7 +4656,7 @@
       }));
     }
     function relayNeoBrowserMessage(event) {
-      if (app.id !== "browser" || event.source === frame.contentWindow) return;
+      if (!browserBacked || event.source === frame.contentWindow) return;
       var data = event.data;
       if (!data || typeof data !== "object" || !Object.prototype.hasOwnProperty.call(data, "__neoBridge")) return;
       try {
@@ -4506,15 +4665,29 @@
         // Ignore messages sent while the browser frame is being replaced.
       }
     }
+    function relayHostWindowState(event) {
+      var detail = event && event.detail;
+      if (!detail || detail.id !== app.id) return;
+      try {
+        frame.contentWindow.postMessage({
+          type: "neo-shell:visibility",
+          visible: detail.closed !== true && detail.minimized !== true
+        }, "*");
+      } catch (_error) {
+        // Ignore state changes while the embedded frame is being replaced.
+      }
+    }
     window.addEventListener("message", handleEmbeddedMediaState);
-    if (app.id === "browser") window.addEventListener("message", relayNeoBrowserMessage);
+    window.addEventListener("neo-window-state-change", relayHostWindowState);
+    if (browserBacked) window.addEventListener("message", relayNeoBrowserMessage);
     if (hostWindow) hostWindow._neoExtraCleanup = function () {
       window.removeEventListener("message", handleEmbeddedMediaState);
-      if (app.id === "browser") window.removeEventListener("message", relayNeoBrowserMessage);
+      window.removeEventListener("neo-window-state-change", relayHostWindowState);
+      if (browserBacked) window.removeEventListener("message", relayNeoBrowserMessage);
       clearEmbeddedMediaState();
     };
     function applyHostIntegration() {
-      if (app.id !== "browser") return;
+      if (!browserBacked) return;
       try {
         var frameDocument = frame.contentDocument;
         if (!frameDocument || !frameDocument.head || frameDocument.getElementById("neo-os-browser-host-fixes")) return;
@@ -4554,6 +4727,7 @@
           frame.contentDocument.documentElement.dataset.neoPerformanceMode = performanceMode();
         }
         frame.contentWindow.postMessage({ type: "neo-shell:performance-mode", mode: performanceMode() }, "*");
+        frame.contentWindow.postMessage({ type: "neo-shell:visibility", visible: !(hostWindow && hostWindow.classList.contains("is-minimized")) }, "*");
       } catch (_error) {}
       loader.classList.add("is-complete");
       fallback.classList.remove("is-visible");
@@ -4772,6 +4946,7 @@
     if (minimized) win.setAttribute("aria-hidden", "true");
     else win.removeAttribute("aria-hidden");
     syncAutoPerformanceMode();
+    renderDock();
     window.dispatchEvent(new CustomEvent("neo-window-state-change", {
       detail: { id: win.dataset.appId || "", minimized: Boolean(minimized), closed: false }
     }));
@@ -4830,7 +5005,10 @@
     function paintDrag() {
       dragFrame = 0;
       if (!drag) return;
-      win.style.transform = "translate3d(" + (drag.nextLeft - drag.left) + "px," + (drag.nextTop - drag.top) + "px,0)";
+      var transform = "translate3d(" + (drag.nextLeft - drag.left) + "px," + (drag.nextTop - drag.top) + "px,0)";
+      if (transform === drag.lastTransform) return;
+      drag.lastTransform = transform;
+      win.style.transform = transform;
     }
 
     chrome.addEventListener("pointerdown", function (event) {
@@ -4848,17 +5026,24 @@
         top: top,
         nextLeft: left,
         nextTop: top,
+        lastTransform: "",
         maxLeft: Math.max(0, layerRect.width - rect.width),
         maxTop: Math.max(0, layerRect.height - rect.height)
       };
+      drag.minTop = drag.maxTop >= WINDOW_TOP_GAP ? WINDOW_TOP_GAP : 0;
       win.classList.add("is-dragging");
+      root.classList.add("is-window-interacting");
+      window.dispatchEvent(new CustomEvent("neo-window-interaction", { detail: { active: true, source: "window-drag" } }));
+      window.dispatchEvent(new CustomEvent("neo-media-priority", { detail: { active: true, source: "window-drag", pauseWallpaper: true } }));
       chrome.setPointerCapture(event.pointerId);
       event.preventDefault();
     });
     chrome.addEventListener("pointermove", function (event) {
       if (!drag || event.pointerId !== drag.pointerId) return;
-      drag.nextLeft = clamp(drag.left + event.clientX - drag.x, 0, drag.maxLeft);
-      drag.nextTop = clamp(drag.top + event.clientY - drag.y, 0, drag.maxTop);
+      var samples = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
+      var pointer = samples.length ? samples[samples.length - 1] : event;
+      drag.nextLeft = Math.round(clamp(drag.left + pointer.clientX - drag.x, 0, drag.maxLeft));
+      drag.nextTop = Math.round(clamp(drag.top + pointer.clientY - drag.y, drag.minTop, drag.maxTop));
       if (!dragFrame) dragFrame = requestAnimationFrame(paintDrag);
     });
     function endDrag(event) {
@@ -4871,10 +5056,10 @@
       win.style.left = Math.round(nextLeft) + "px";
       win.style.top = Math.round(nextTop) + "px";
       win.style.transform = "";
-      // Commit the layout position while drag transitions are still disabled.
-      // Otherwise the temporary translate and the new left/top can appear together.
-      win.getBoundingClientRect();
       win.classList.remove("is-dragging");
+      root.classList.remove("is-window-interacting");
+      window.dispatchEvent(new CustomEvent("neo-window-interaction", { detail: { active: false, source: "window-drag" } }));
+      window.dispatchEvent(new CustomEvent("neo-media-priority", { detail: { active: false, source: "window-drag", pauseWallpaper: true } }));
       if (chrome.hasPointerCapture(event.pointerId)) chrome.releasePointerCapture(event.pointerId);
       saveWindowState(win);
     }
@@ -4896,7 +5081,9 @@
       var width = Math.min(rect.width, bounds.width), height = Math.min(rect.height, bounds.height);
       win.style.width = width + 'px'; win.style.height = height + 'px';
       win.style.left = clamp(rect.left - bounds.left,0,Math.max(0,bounds.width-width)) + 'px';
-      win.style.top = clamp(rect.top - bounds.top,0,Math.max(0,bounds.height-height)) + 'px';
+      var maxTop = Math.max(0, bounds.height - height);
+      var minTop = maxTop >= WINDOW_TOP_GAP ? WINDOW_TOP_GAP : 0;
+      win.style.top = clamp(rect.top - bounds.top, minTop, maxTop) + 'px';
       saveWindowState(win);
     });
   }
@@ -6837,15 +7024,56 @@
     weatherFrame = requestAnimationFrame(frame);
   }
 
+  function playBootVideo(video, restart) {
+    if (!video) return;
+    if (video._neoPauseTimer) {
+      window.clearTimeout(video._neoPauseTimer);
+      video._neoPauseTimer = 0;
+    }
+    if (restart) {
+      try { video.currentTime = 0; } catch (error) {}
+    }
+    var playback;
+    try { playback = video.play(); } catch (error) { return; }
+    if (playback && typeof playback.catch === "function") playback.catch(function () {});
+  }
+
+  function pauseBootVideo(video) {
+    if (!video) return;
+    if (video._neoPauseTimer) window.clearTimeout(video._neoPauseTimer);
+    video._neoPauseTimer = window.setTimeout(function () {
+      video._neoPauseTimer = 0;
+      try { video.pause(); } catch (error) {}
+    }, 240);
+  }
+
+  function waitForBootVideo(video, minimumDelay) {
+    var minimum = new Promise(function (resolve) { window.setTimeout(resolve, minimumDelay); });
+    if (!video || video.readyState >= 2) return minimum;
+    var videoReady = new Promise(function (resolve) {
+      var settled = false;
+      function done() {
+        if (settled) return;
+        settled = true;
+        video.removeEventListener("loadeddata", done);
+        video.removeEventListener("error", done);
+        resolve();
+      }
+      video.addEventListener("loadeddata", done, { once: true });
+      video.addEventListener("error", done, { once: true });
+    });
+    var videoGuard = new Promise(function (resolve) { window.setTimeout(resolve, 1800); });
+    return Promise.all([minimum, Promise.race([videoReady, videoGuard])]);
+  }
+
   function performBoot() {
-    var image = new Image();
-    image.src = "./assets/universal-loading-screen-white.webp";
-    var ready = typeof image.decode === "function" ? image.decode().catch(function () {}) : Promise.resolve();
-    var timeout = new Promise(function (resolve) { window.setTimeout(resolve, 650); });
-    Promise.race([ready, timeout]).then(function () {
+    var video = document.querySelector("[data-universal-loading-video]");
+    playBootVideo(video, true);
+    waitForBootVideo(video, 1400).then(function () {
       requestAnimationFrame(function () {
         root.dataset.boot = "complete";
         try { sessionStorage.setItem(BOOT_SESSION_KEY, "1"); } catch (error) {}
+        pauseBootVideo(video);
       });
     });
   }
@@ -6854,7 +7082,7 @@
     var screen = document.getElementById("neo-start-screen");
     var desktop = document.getElementById("neo-desktop");
     var universalLoader = document.getElementById("boot-screen");
-    var universalLoaderImage = universalLoader && universalLoader.querySelector("[data-universal-loading-image]");
+    var universalLoaderVideo = universalLoader && universalLoader.querySelector("[data-universal-loading-video]");
     var startInProgress = false;
     if (!screen) {
       onComplete();
@@ -6869,20 +7097,16 @@
     function showUniversalLoader() {
       root.dataset.universalLoading = "true";
       if (universalLoader) universalLoader.setAttribute("aria-label", "Loading NEO OS");
+      playBootVideo(universalLoaderVideo, true);
     }
 
     function hideUniversalLoader() {
       delete root.dataset.universalLoading;
+      pauseBootVideo(universalLoaderVideo);
     }
 
     function waitForUniversalLoader() {
-      var minimum = new Promise(function (resolve) { window.setTimeout(resolve, 1000); });
-      if (!universalLoaderImage || (universalLoaderImage.complete && universalLoaderImage.naturalWidth)) return minimum;
-      var imageReady = typeof universalLoaderImage.decode === "function"
-        ? universalLoaderImage.decode().catch(function () {})
-        : Promise.resolve();
-      var imageGuard = new Promise(function (resolve) { window.setTimeout(resolve, 250); });
-      return Promise.all([minimum, Promise.race([imageReady, imageGuard])]);
+      return waitForBootVideo(universalLoaderVideo, 1400);
     }
 
     function finish(mode) {
@@ -7304,7 +7528,7 @@
       if (nowPlaying) {
         event.preventDefault();
         if (!nowPlayingWidget || nowPlayingWidget.querySelector(".now-playing-controls").hidden) return;
-        if (nowPlayingState && (nowPlayingState.source === "audiobooks" || nowPlayingState.source === "neo-local-player")) {
+        if (nowPlayingState && nowPlayingState.transport && nowPlayingState.source) {
           window.dispatchEvent(new CustomEvent("neo-media-transport-request", {
             detail: { source: nowPlayingState.source, action: nowPlaying.dataset.nowPlayingAction }
           }));
@@ -7630,15 +7854,14 @@
       notify: showToast,
       icon: iconMarkup,
       getApps: function () {
-        return launcherApps().map(function (app) {
-          return { id: app.id, title: app.title, subtitle: app.subtitle, icon: app.icon, category: app.category, pinned: Boolean(app.pinned), installed: true, core: Boolean(app.core), hideName: Boolean(app.hideName), accessibleName: app.accessibleName || app.title };
-        });
+        return launcherApps().map(publicAppRecord);
       },
       getStoreApps: function () {
-        return storeApps().map(function (app) {
-          return { id: app.id, title: app.title, subtitle: app.subtitle, icon: app.icon, category: app.category, pinned: Boolean(app.pinned), installed: Boolean(app.installed), core: Boolean(app.core), hideName: Boolean(app.hideName), accessibleName: app.accessibleName || app.title };
-        });
+        return storeApps().map(publicAppRecord);
       },
+      getCustomApps: function () { return launcherApps().filter(function (app) { return app.custom; }).map(publicAppRecord); },
+      installCustomApp: installCustomApp,
+      removeCustomApp: removeCustomApp,
       setPinned: setAppPinned,
       setInstalled: setAppInstalled,
       isInstalled: function (id) { return Boolean(apps[id] && apps[id].installed); },

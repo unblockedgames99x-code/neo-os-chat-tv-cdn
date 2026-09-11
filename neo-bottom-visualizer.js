@@ -13,6 +13,7 @@
   var enabled = false;
   var playing = false;
   var measured = false;
+  var fallbackGain = 0;
   var mediaStates = new Map();
   var spectrumSources = new Map();
   var targets = new Float32Array(BAND_COUNT);
@@ -28,6 +29,16 @@
 
   function clamp(value) {
     return Math.max(0, Math.min(1, Number(value) || 0));
+  }
+
+  function masterGain() {
+    var state = window.NEO_SYSTEM_BRIDGE && window.NEO_SYSTEM_BRIDGE.get();
+    if (state && state.muted) return 0;
+    return clamp(state && state.volume !== undefined ? state.volume / 100 : 1);
+  }
+
+  function displayLevel(value, gain) {
+    return Math.min(.94, Math.pow(clamp(value), 1.12) * .98 * clamp(gain));
   }
 
   function normalize(values) {
@@ -49,25 +60,34 @@
     var nextTargets = new Float32Array(BAND_COUNT);
     var nextPlaying = false;
     var nextMeasured = false;
+    var nextFallbackGain = 0;
+    var systemGain = masterGain();
     spectrumSources.forEach(function (entry, source) {
       if (now - entry.updatedAt > 1600) {
         spectrumSources.delete(source);
         return;
       }
       if (!entry.active || now - entry.updatedAt > 800) return;
+      var mediaState = mediaStates.get(source);
+      var sourceGain = systemGain * (mediaState ? (mediaState.muted ? 0 : mediaState.volume) : 1);
       nextPlaying = true;
       nextMeasured = nextMeasured || entry.measured;
+      nextFallbackGain = Math.max(nextFallbackGain, sourceGain);
       for (var index = 0; index < BAND_COUNT; index += 1) {
-        nextTargets[index] = Math.max(nextTargets[index], entry.levels[index] || 0);
+        nextTargets[index] = Math.max(nextTargets[index], displayLevel(entry.levels[index] || 0, sourceGain));
       }
     });
     mediaStates.forEach(function (entry, source) {
       if (now - entry.updatedAt > 1600) mediaStates.delete(source);
-      else if (entry.playing) nextPlaying = true;
+      else if (entry.playing) {
+        nextPlaying = true;
+        nextFallbackGain = Math.max(nextFallbackGain, systemGain * (entry.muted ? 0 : entry.volume));
+      }
     });
     targets = nextTargets;
     playing = nextPlaying;
     measured = nextMeasured;
+    fallbackGain = nextFallbackGain;
     schedule();
   }
 
@@ -106,7 +126,7 @@
 
   function draw(now, once) {
     frame = 0;
-    if (!enabled || document.hidden) return;
+    if (!enabled || document.hidden || root.classList.contains("is-window-interacting")) return;
     if (!once && now - lastFrame < 30) {
       frame = requestAnimationFrame(draw);
       return;
@@ -127,7 +147,7 @@
       var fallback = playing && !measured && !reduced
         ? .055 + .04 * Math.max(0, Math.sin(phase * 2.1 + index * .47))
         : 0;
-      var target = playing ? Math.max(targets[index], fallback) : 0;
+      var target = playing ? Math.max(targets[index], displayLevel(fallback, fallbackGain)) : 0;
       var speed = target > levels[index] ? .72 : .18;
       levels[index] += (target - levels[index]) * speed;
       if (levels[index] < .002) levels[index] = 0;
@@ -162,7 +182,7 @@
   }
 
   function schedule() {
-    if (enabled && !frame && !document.hidden) frame = requestAnimationFrame(draw);
+    if (enabled && !frame && !document.hidden && !root.classList.contains("is-window-interacting")) frame = requestAnimationFrame(draw);
   }
 
   function syncMenu() {
@@ -196,6 +216,8 @@
     var detail = event.detail || {};
     mediaStates.set(String(detail.source || "media"), {
       playing: detail.active !== false && detail.playing === true,
+      volume: detail.volume === undefined ? 1 : clamp(detail.volume),
+      muted: detail.muted === true,
       updatedAt: Date.now()
     });
     refreshSources();
@@ -215,6 +237,8 @@
     refreshSources();
   });
 
+  window.addEventListener("neo-system-state", refreshSources);
+
   window.addEventListener("resize", function () {
     if (!enabled || resizeFrame) return;
     resizeFrame = requestAnimationFrame(resize);
@@ -227,6 +251,15 @@
       return;
     }
     if (enabled) resize();
+  });
+
+  window.addEventListener("neo-window-interaction", function (event) {
+    if (event.detail && event.detail.active === true) {
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      return;
+    }
+    schedule();
   });
 
   window.NEO_BOTTOM_VISUALIZER = {

@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  // Real, openly released Blender films. The NEO player uses stream-ready
-  // mirrors and can fail over to a second host when one is unavailable.
+  // Real, openly released Blender films. The primary player uses stream-ready
+  // MP4 mirrors and can fail over to a second host when one is unavailable.
   window.NEO_STREAM_CATALOG = [
     {
       id: "open-big-buck-bunny",

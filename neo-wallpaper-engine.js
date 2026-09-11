@@ -841,7 +841,9 @@
       stabilityExpected = now + 1000;
       var animated = activeMedia && (activeMedia.tagName === "IFRAME" || activeMedia.tagName === "VIDEO" || activeMedia.tagName === "CANVAS");
       if (!document.hidden && animated && !stabilityPaused && !autoPerformancePaused && !mediaPriorityPaused) {
-        if (drift >= 450) stabilityStallScore += 2;
+        if (drift >= 5000) stabilityStallScore = 0;
+        else if (drift >= 1000) stabilityStallScore += 2;
+        else if (drift >= 450) stabilityStallScore += 1;
         else if (drift >= 180) stabilityStallScore += 1;
         else stabilityStallScore = Math.max(0, stabilityStallScore - 1);
         if (stabilityStallScore >= 2) {
@@ -850,7 +852,7 @@
           syncPlayback();
           emit("stability-backoff");
           if (stabilityRecovery) window.clearTimeout(stabilityRecovery);
-          stabilityRecovery = window.setTimeout(releaseStabilityPause, 8000);
+          stabilityRecovery = window.setTimeout(releaseStabilityPause, 2500);
         }
       } else if (!stabilityPaused) {
         stabilityStallScore = 0;
@@ -861,8 +863,23 @@
   }
 
   function resumePlayback() {
+    var recoveredFromStabilityPause = false;
+    if (!document.hidden) {
+      if (stabilityRecovery) window.clearTimeout(stabilityRecovery);
+      stabilityRecovery = 0;
+      recoveredFromStabilityPause = stabilityPaused;
+      stabilityPaused = false;
+      stabilityStallScore = 0;
+      stabilityExpected = performance.now() + 1000;
+      root.dataset.wallpaperStability = "stable";
+    }
     syncPlayback();
     window.setTimeout(syncPlayback, 180);
+    if (!document.hidden) {
+      window.setTimeout(syncPlayback, 800);
+      window.setTimeout(syncPlayback, 2000);
+    }
+    if (recoveredFromStabilityPause) emit("stability-resume");
   }
 
   function clearAnimatedImageFreeze() {

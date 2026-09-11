@@ -229,9 +229,31 @@ html[data-neo-theme="glass"] {
 }
 
 .neo-window.is-dragging {
-  opacity: .96;
+  opacity: 1;
   transform: translate3d(0, 0, 0) scale(1);
-  box-shadow: 0 34px 96px rgba(0, 0, 0, .5), 0 0 0 2px color-mix(in srgb, var(--desktop-accent) 34%, transparent);
+  box-shadow: 0 22px 58px rgba(0, 0, 0, .46), 0 0 0 2px color-mix(in srgb, var(--desktop-accent) 34%, transparent);
+  animation: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  backface-visibility: hidden;
+  filter: none !important;
+  isolation: isolate;
+  transition: none !important;
+  will-change: transform;
+}
+
+.neo-window.is-dragging > .window-chrome {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.neo-window.is-dragging > .window-body {
+  contain: paint;
+  pointer-events: none !important;
+}
+
+.neo-window.is-dragging iframe {
+  pointer-events: none !important;
 }
 
 .neo-window.is-maximized { border-radius: 12px; }

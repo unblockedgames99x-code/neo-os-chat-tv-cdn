@@ -5,13 +5,11 @@ html.neo-auto-hide-bars {
 }
 
 html.neo-auto-hide-bars .neo-status-strip {
-  opacity: 0;
-  pointer-events: none;
-  transform: translate3d(0, calc(-100% - 4px), 0) !important;
-  transition:
-    transform 220ms var(--neo-hidden-bar-ease),
-    opacity 140ms ease !important;
-  will-change: transform, opacity;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none !important;
+  transition: none !important;
+  will-change: auto;
 }
 
 html.neo-auto-hide-bars .neo-status-strip.is-edge-revealed,

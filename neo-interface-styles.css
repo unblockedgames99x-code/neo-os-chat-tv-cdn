@@ -1906,6 +1906,25 @@ html[data-interface-style="retro"] .neo-window[data-app-id="clock"] .neo-utility
   font-family: var(--retro-font) !important;
 }
 
+html[data-interface-style="retro"] .neo-window[data-app-id="app-installer"] .app-installer {
+  color: var(--retro-ink) !important;
+  background: var(--retro-panel-light) !important;
+  font-family: var(--retro-font) !important;
+}
+
+html[data-interface-style="retro"] .neo-window[data-app-id="app-installer"] :is(.installer-form,.installed-sites,.installed-site) {
+  color: var(--retro-ink) !important;
+  background: var(--retro-panel) !important;
+  border: 2px solid !important;
+  border-color: var(--retro-light-edge) var(--retro-dark-edge) var(--retro-dark-edge) var(--retro-light-edge) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+html[data-interface-style="retro"] .neo-window[data-app-id="app-installer"] :is(input,select,.button) {
+  border-radius: 0 !important;
+}
+
 html[data-interface-style="retro"] .neo-window:is([data-app-id="notes"],[data-app-id="paint"]) .neo-utility > header {
   color: var(--retro-ink) !important;
   background: var(--retro-panel) !important;
