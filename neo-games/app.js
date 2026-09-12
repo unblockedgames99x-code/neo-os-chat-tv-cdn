@@ -5,7 +5,7 @@
   var CATALOG_URL = "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/scrapegames.js";
   var CATALOG_URLS = [config.catalog || CATALOG_URL].concat(Array.isArray(config.catalogFallbacks) ? config.catalogFallbacks : []).filter(Boolean);
   var ASSET_BASE = config.assetBase || "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/";
-  var EXECUTABLE_BASE = config.executableBase || "https://raw.githack.com/lauraevan/greatestgreatest-revive/main/";
+  var EXECUTABLE_BASE = config.executableBase || "https://raw.githubusercontent.com/lauraevan/greatestgreatest-revive/main/";
   var chunkSize = Math.max(24, Math.min(72, Number(config.chunkSize) || 48));
   var favoritesKey = "neo_games_favorites_v4";
   var recentKey = "neo_games_recent_v4";
@@ -69,11 +69,11 @@
     var url = safeWebUrl(value, EXECUTABLE_BASE);
     if (!url) return "";
     var match = url.match(/^https?:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^@/]+)@([^/]+)\/(.+)$/i);
-    if (match) return safeWebUrl("https://raw.githack.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
-    match = url.match(/^https?:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
-    if (match) return safeWebUrl("https://raw.githack.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
+    if (match) return safeWebUrl("https://raw.githubusercontent.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
+    match = url.match(/^https?:\/\/(?:raw|rawcdn)\.githack\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
+    if (match) return safeWebUrl("https://raw.githubusercontent.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
     match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:blob|raw)\/([^/]+)\/(.+)$/i);
-    if (match) return safeWebUrl("https://raw.githack.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
+    if (match) return safeWebUrl("https://raw.githubusercontent.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
     return url;
   }
 
@@ -443,8 +443,15 @@
   }
 
   function requestProxiedEmbed(frame, target) {
-    if (!isEmbedded() || window.__NEOLinkProxyInstalled !== true) return false;
-    frame.setAttribute("src", target);
+    if (!isEmbedded()) return false;
+    var wrapper = new URL("../NEO-BROWSER/index.html", document.baseURI);
+    wrapper.searchParams.set("neo-app-mode", "1");
+    wrapper.searchParams.set("neo-custom-app", "1");
+    wrapper.searchParams.set("neo-app-target", target);
+    wrapper.searchParams.set("neo-game-mode", "1");
+    frame.dataset.neoProxySource = target;
+    frame.dataset.neoProxyReady = "true";
+    frame.setAttribute("src", wrapper.href);
     return true;
   }
 
@@ -466,6 +473,7 @@
     shortcutButton.textContent = "Add to taskbar";
     shortcutButton.title = "Also adds this game to the home screen";
     $("[data-player]").hidden = false;
+    document.documentElement.classList.add("is-playing");
     showFrameMessage("Loading " + game.name + " through the NEO web proxy…", false);
     if (!requestProxiedEmbed(frame, game.url)) {
       showFrameMessage("Open Games inside NEO OS to launch this title through the web proxy.", true);
@@ -488,6 +496,7 @@
     shortcutRequestId = "";
     activeGame = null;
     $("[data-player]").hidden = true;
+    document.documentElement.classList.remove("is-playing");
   }
 
   function addActiveGameToTaskbar() {
