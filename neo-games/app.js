@@ -262,6 +262,71 @@
     host.replaceChildren(fragment);
   }
 
+  function enableCategoryPanning(host) {
+    if (!host || host.dataset.neoPanningReady === "true") return;
+    host.dataset.neoPanningReady = "true";
+    var pointerId = null;
+    var captureTarget = null;
+    var startX = 0;
+    var startScrollLeft = 0;
+    var dragged = false;
+    var suppressClick = false;
+
+    host.addEventListener("wheel", function (event) {
+      if (host.scrollWidth <= host.clientWidth) return;
+      var rawDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (!rawDelta) return;
+      var scale = event.deltaMode === 1 ? 18 : event.deltaMode === 2 ? host.clientWidth : 1;
+      var before = host.scrollLeft;
+      host.scrollLeft += rawDelta * scale;
+      if (host.scrollLeft !== before) event.preventDefault();
+    }, { passive: false });
+
+    host.addEventListener("pointerdown", function (event) {
+      if (event.pointerType === "touch" || event.button !== 0) return;
+      pointerId = event.pointerId;
+      captureTarget = event.target;
+      startX = event.clientX;
+      startScrollLeft = host.scrollLeft;
+      dragged = false;
+      host.classList.add("is-grabbing");
+      if (captureTarget && captureTarget.setPointerCapture) captureTarget.setPointerCapture(pointerId);
+    });
+
+    host.addEventListener("pointermove", function (event) {
+      if (event.pointerId !== pointerId) return;
+      var distance = startX - event.clientX;
+      if (!dragged && Math.abs(distance) > 4) dragged = true;
+      if (!dragged) return;
+      event.preventDefault();
+      host.scrollLeft = startScrollLeft + distance;
+    }, { passive: false });
+
+    function finishPan(event) {
+      if (event.pointerId !== pointerId) return;
+      if (dragged) {
+        suppressClick = true;
+        window.setTimeout(function () { suppressClick = false; }, 0);
+      }
+      if (captureTarget && captureTarget.releasePointerCapture && captureTarget.hasPointerCapture && captureTarget.hasPointerCapture(pointerId)) {
+        captureTarget.releasePointerCapture(pointerId);
+      }
+      pointerId = null;
+      captureTarget = null;
+      dragged = false;
+      host.classList.remove("is-grabbing");
+    }
+
+    host.addEventListener("pointerup", finishPan);
+    host.addEventListener("pointercancel", finishPan);
+    host.addEventListener("click", function (event) {
+      if (!suppressClick) return;
+      suppressClick = false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+  }
+
   function sortGames(items) {
     return items.slice().sort(function (left, right) {
       if (sortMode === "title-desc") return right.name.localeCompare(left.name, undefined, { numeric: true, sensitivity: "base" });
@@ -538,7 +603,9 @@
     $$("[data-mode]").forEach(function (button) {
       button.addEventListener("click", function () { setMode(button.dataset.mode); });
     });
-    $("[data-category-chips]").addEventListener("click", function (event) {
+    var categoryChips = $("[data-category-chips]");
+    enableCategoryPanning(categoryChips);
+    categoryChips.addEventListener("click", function (event) {
       var button = event.target.closest("[data-category]");
       if (button) setCategory(button.dataset.category);
     });

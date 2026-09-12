@@ -195,12 +195,31 @@ main { min-height: 100vh; margin-left: 94px; }
   margin-top: 24px;
   padding: 2px 0 9px;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   overflow-x: auto;
-  scrollbar-width: none;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--games-accent) 46%, transparent) transparent;
+  overscroll-behavior-inline: contain;
+  scroll-behavior: smooth;
+  scroll-padding-inline: 12px;
+  touch-action: pan-x;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.category-chips::-webkit-scrollbar { display: none; }
+.category-chips::-webkit-scrollbar { height: 5px; }
+.category-chips::-webkit-scrollbar-track { background: transparent; }
+.category-chips::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--games-accent) 42%, transparent);
+  border-radius: 999px;
+}
+.category-chips.is-grabbing {
+  scroll-behavior: auto;
+}
+.category-chips.is-grabbing,
+.category-chips.is-grabbing * { cursor: grabbing !important; }
 .category-chip {
   min-height: 38px;
   padding: 0 16px;
