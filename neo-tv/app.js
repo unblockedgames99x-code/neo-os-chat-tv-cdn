@@ -1,7 +1,8 @@
 (function () {
   "use strict";
 
-  var catalog = Array.isArray(window.NEO_STREAM_CATALOG) ? window.NEO_STREAM_CATALOG : [];
+  var catalog = Array.isArray(window.NEO_MOVIES_CATALOG) ? window.NEO_MOVIES_CATALOG :
+    (Array.isArray(window.NEO_STREAM_CATALOG) ? window.NEO_STREAM_CATALOG : []);
   var profileKey = "neo_stream_profiles_v1";
   var dataKey = "neo_stream_profile_data_v1";
   var settingsKey = "neo_stream_settings_v1";
@@ -19,15 +20,12 @@
   var activeMediaIndex = 0;
   var activeResumeAt = 0;
   var playerLoadId = 0;
-  var profileAvatars = [
-    { id: "netflix-red", label: "Red classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABakRc13qnznu9gXCjeNTetIpWLBYv1BHtjenkcA2UPHsk_oKNyiEjMqDg5JrLMa6B-Ynairtq2_fSFPjKJ6mqB2xuIeeCZm23A.png?r=e6e" },
-    { id: "netflix-charcoal", label: "Charcoal classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABTfUlmnFRKf_OEUhru2aqso39FKxONTd5Dt_sWnNj5wAg4bbMBZ8sgZupTfnB9IQ8tmWcrzRiyZsCp1bLKb_n7VrnTw3_Ovw7Q.png?r=bd7" },
-    { id: "netflix-yellow", label: "Yellow classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABelkMs-h2DXUYbzHHCaFQo7ykBvO6JoCssR5azSK1jNcUTRExSzh9R1HNbNbWzIhTri5iN8U3N9GSmbXeLASZqL5IKRHLri1PA.png?r=1d4" },
-    { id: "netflix-green", label: "Green classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABXan2ftdVhTtVVzZctW_PhUGLw-uzzdXn1BaTkNyVzJQk62yuNZpVU0_GUBJu9X6ry23mg6k7-C11lblVvDFot41ZZ6dxcZoFw.png?r=a4b" },
-    { id: "netflix-purple", label: "Purple classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABVhab2XqRI6ThDSR6UvGIb_4U4tDnYLNtsDTaZxg91Vj02LwK50_WVhohDm7wDZ_ncQP7D9EQo_iPdzQDCU7ulekO9gcgOMKDw.png?r=98e" },
-    { id: "netflix-pink", label: "Pink classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABedBXQ7LUp91euJT4qzL6i6X6ZK0DUt9o_tXOojv1XvPtAifsQWvcOd2Z6vFM7wdgXCo1m_DPiJTzInm0Lbo2oABEeAaAxOWJQ.png?r=54c" },
-    { id: "netflix-blue", label: "Blue classic smile", src: "https://occ-0-8782-2219.1.nflxso.net/dnm/api/v6/vN7bi_My87NPKvsBoib006Llxzg/AAAABXh10ggeTTdhZO1JIH_SNQ4gp0vsNnWfE8Mg2ckwzGvUzJMRpPFCujRK3Ex5K9VbkIyvUHQ92LBVdsemkj6zlpquL-qWMCNKeg.png?r=229" }
-  ];
+  var uploadedTitles = [];
+  var shellPopoutActive = false;
+  var avatarSprite = "./assets/profile-avatars-v1.webp";
+  var profileAvatars = Array.from({ length: 16 }, function (_, index) {
+    return { id: "classic-" + String(index + 1).padStart(2, "0"), label: "Classic character " + (index + 1), spriteIndex: index };
+  });
   try { requestedView = new URLSearchParams(location.search).get("view") || ""; } catch (error) {}
   var initialView = ["home", "movies", "series", "anime", "manga", "list"].indexOf(requestedView) !== -1 ? requestedView : "home";
   var currentView = initialView;
@@ -44,7 +42,27 @@
   function clean(value) { return String(value || "").replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").trim(); }
   function initials(name) { return clean(name).split(/\s+/).slice(0, 2).map(function (part) { return part[0] || ""; }).join("").toUpperCase() || "N"; }
   function uid() { return "p-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function proxyRoute(value, kind) {
+    if (!value || /^(?:blob:|data:)/i.test(String(value))) return Promise.resolve(String(value || ""));
+    var proxy = window.NEO_PROXY_CLIENT;
+    if (!proxy) {
+      if (window.parent !== window) return Promise.reject(new Error("The NEO web proxy is unavailable."));
+      return Promise.resolve(String(value));
+    }
+    if (kind === "image" && typeof proxy.image === "function") return proxy.image(value);
+    if (kind === "media" && typeof proxy.media === "function") return proxy.media(value);
+    return proxy.resolve(value, kind || "fetch");
+  }
+  function proxyFetch(value, options) {
+    var proxy = window.NEO_PROXY_CLIENT;
+    if (proxy && typeof proxy.fetch === "function") return proxy.fetch(value, options);
+    if (window.parent !== window) return Promise.reject(new Error("The NEO web proxy is unavailable."));
+    return fetch(value, Object.assign({ credentials: "omit", cache: "no-store" }, options || {}));
+  }
   function profileAvatar(profile) {
+    if (profile && profile.avatar === "custom" && /^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(String(profile.avatarData || ""))) {
+      return { id: "custom", label: "Uploaded picture", src: profile.avatarData };
+    }
     var selected = profileAvatars.find(function (avatar) { return avatar.id === String(profile && profile.avatar || ""); });
     if (selected) return selected;
     var seed = String(profile && (profile.id || profile.name) || "guest");
@@ -57,17 +75,27 @@
     var avatar = profileAvatar(profile);
     node.textContent = "";
     node.classList.add("has-profile-picture");
-    var image = document.createElement("img");
-    image.src = avatar.src;
-    image.alt = "";
-    image.loading = "lazy";
-    image.decoding = "async";
-    image.referrerPolicy = "no-referrer";
-    image.addEventListener("error", function () {
-      node.classList.remove("has-profile-picture");
-      node.textContent = initials(profile && profile.name || avatar.label);
-    }, { once: true });
-    node.appendChild(image);
+    node.style.removeProperty("background-image");
+    node.style.removeProperty("background-position");
+    node.style.removeProperty("background-size");
+    if (avatar.src) {
+      var image = document.createElement("img");
+      image.src = avatar.src;
+      image.alt = "";
+      image.loading = "lazy";
+      image.decoding = "async";
+      image.addEventListener("error", function () {
+        node.classList.remove("has-profile-picture");
+        node.textContent = initials(profile && profile.name || avatar.label);
+      }, { once: true });
+      node.appendChild(image);
+    } else {
+      var column = avatar.spriteIndex % 4;
+      var row = Math.floor(avatar.spriteIndex / 4);
+      node.style.backgroundImage = 'url("' + avatarSprite + '")';
+      node.style.backgroundSize = "400% 400%";
+      node.style.backgroundPosition = (column * 100 / 3) + "% " + (row * 100 / 3) + "%";
+    }
     node.setAttribute("aria-hidden", "true");
   }
   function renderAvatarPicker(selectedId) {
@@ -89,6 +117,8 @@
       button.addEventListener("click", function () {
         var form = $("[data-profile-form]");
         form.elements.avatar.value = avatar.id;
+        form.elements.avatarData.value = "";
+        $("[data-avatar-upload-note]").textContent = "Images are resized and stored only on this device.";
         $$("[data-avatar]", host).forEach(function (choice) { choice.setAttribute("aria-pressed", choice === button ? "true" : "false"); });
       });
       host.appendChild(button);
@@ -97,7 +127,7 @@
   function profiles() {
     var list = read(profileKey, null);
     if (!Array.isArray(list) || !list.length) {
-      list = [{ id: "guest", name: "Guest", color: "#77d5ff", avatar: "netflix-blue", kids: false }];
+      list = [{ id: "guest", name: "Guest", color: "#77d5ff", avatar: "classic-01", kids: false }];
       save(profileKey, list);
     }
     return list.slice(0, 6);
@@ -175,6 +205,7 @@
     form.elements.name.value = profile ? profile.name : "";
     form.elements.color.value = profile ? profile.color : "#77d5ff";
     form.elements.avatar.value = profileAvatar(profile || { id: profileEditingId || "new-profile" }).id;
+    form.elements.avatarData.value = profile && profile.avatarData || "";
     form.elements.kids.checked = Boolean(profile && profile.kids);
     renderAvatarPicker(form.elements.avatar.value);
     $("[data-profile-dialog-title]").textContent = profile ? "Edit profile" : "Add profile";
@@ -191,7 +222,9 @@
       id: profileEditingId || uid(),
       name: clean(form.elements.name.value).slice(0, 18) || "Profile",
       color: form.elements.color.value || "#77d5ff",
-      avatar: profileAvatars.some(function (avatar) { return avatar.id === form.elements.avatar.value; }) ? form.elements.avatar.value : "netflix-blue",
+      avatar: form.elements.avatar.value === "custom" && form.elements.avatarData.value ? "custom" :
+        (profileAvatars.some(function (avatar) { return avatar.id === form.elements.avatar.value; }) ? form.elements.avatar.value : "classic-01"),
+      avatarData: form.elements.avatar.value === "custom" ? form.elements.avatarData.value : "",
       kids: form.elements.kids.checked
     };
     var index = list.findIndex(function (item) { return item.id === value.id; });
@@ -227,7 +260,7 @@
       action: "query", format: "json", origin: "*", prop: "pageimages",
       piprop: "thumbnail", pithumbsize: "600", redirects: "1", titles: key
     });
-    posterFallbacks[key] = fetch("https://en.wikipedia.org/w/api.php?" + query.toString(), { credentials: "omit", cache: "force-cache" })
+    posterFallbacks[key] = proxyFetch("https://en.wikipedia.org/w/api.php?" + query.toString(), { cache: "force-cache" })
       .then(function (response) { if (!response.ok) throw new Error("Poster unavailable"); return response.json(); })
       .then(function (payload) {
         var pages = payload && payload.query && payload.query.pages;
@@ -240,6 +273,8 @@
   function loadPoster(image, title, source) {
     var frame = image.closest(".poster");
     var triedFallback = false;
+    var requestId = String(Date.now()) + Math.random();
+    image.dataset.requestId = requestId;
     if (frame) {
       frame.dataset.fallback = title.title;
       frame.classList.add("is-missing");
@@ -250,27 +285,35 @@
       if (frame) frame.classList.add("is-missing");
     }
     function useFallback() {
+      if (title.userUpload) return finishMissing();
       if (triedFallback) return finishMissing();
       triedFallback = true;
       wikipediaPoster(title.title).then(function (fallback) {
-        if (fallback) image.src = fallback;
+        if (fallback) assign(fallback);
         else finishMissing();
       });
     }
+    function assign(value) {
+      proxyRoute(value, "image").then(function (route) {
+        if (image.dataset.requestId === requestId && route) image.src = route;
+      }).catch(useFallback);
+    }
     image.addEventListener("load", function () { if (frame) frame.classList.remove("is-missing"); });
     image.addEventListener("error", useFallback);
-    if (source) image.src = source;
+    image.removeAttribute("src");
+    if (source) assign(source);
     else useFallback();
   }
   function allowedCatalog() {
-    if (!activeProfile || !activeProfile.kids) return catalog.slice();
-    return catalog.filter(function (title) { return !/14|13|18|R/.test(title.maturity || ""); });
+    var combined = uploadedTitles.concat(catalog);
+    if (!activeProfile || !activeProfile.kids) return combined;
+    return combined.filter(function (title) { return title.userUpload || !/14|13|18|R/.test(title.maturity || ""); });
   }
   function streamSources(title) {
     if (!title) return [];
     var candidates = [title.media].concat(Array.isArray(title.mediaFallbacks) ? title.mediaFallbacks : []);
     return candidates.filter(function (source, index) {
-      return /^https:\/\//i.test(String(source || "")) && candidates.indexOf(source) === index;
+      return /^(?:https:\/\/|blob:)/i.test(String(source || "")) && candidates.indexOf(source) === index;
     });
   }
   function setHero(title) {
@@ -291,8 +334,12 @@
         image.style.backgroundImage = sourceUrl ? 'url("' + sourceUrl.replace(/"/g, "%22") + '")' : "none";
         image.style.opacity = "1";
       }
-      if (source) apply(source);
-      else wikipediaPoster(title.title).then(apply).catch(function () { apply(""); });
+      function routeAndApply(sourceUrl) {
+        if (!sourceUrl) return apply("");
+        proxyRoute(sourceUrl, "image").then(apply).catch(function () { apply(""); });
+      }
+      if (source) routeAndApply(source);
+      else wikipediaPoster(title.title).then(routeAndApply).catch(function () { apply(""); });
     }, 80);
   }
 
@@ -308,17 +355,17 @@
     var data = currentData();
     var items = allowedCatalog();
     var streaming = items.filter(function (item) { return item.type === "movie" && streamSources(item).length; });
-    if (view === "movies") return [{ title: "Streaming now", items: streaming, portrait: true, emptyMessage: "No playable films are available right now." }].concat(liveRows);
+    if (view === "movies") return (uploadedTitles.length ? [{ title: "Your uploads", items: uploadedTitles, portrait: true }] : []).concat([{ title: "Streaming now", items: streaming, portrait: true, emptyMessage: "No playable films are available right now." }], liveRows);
     if (view === "series") return [{ title: "Discover series", tvmaze: true }];
     if (view === "anime") return [{ title: "Anime", items: [], emptyMessage: "No verified anime titles are available yet." }];
     if (view === "manga") return [{ title: "Manga", items: [], portrait: true, emptyMessage: "No verified manga titles are available yet." }];
     if (view === "list") return [{ title: "My List", items: items.filter(function (item) { return data.list.indexOf(item.id) !== -1; }), emptyMessage: "Your list is empty." }];
     var progressItems = Object.keys(data.progress).map(function (id) { return items.find(function (item) { return item.id === id; }); }).filter(Boolean);
-    return [
+    return (uploadedTitles.length ? [{ title: "Your uploads", items: uploadedTitles, portrait: true }] : []).concat([
       { title: "Continue watching", items: progressItems },
       { title: "Streaming now", items: streaming.slice(0, 12), portrait: true },
       { title: "Series", items: items.filter(function (item) { return item.type === "series"; }).slice(0, 12) }
-    ].filter(function (row) { return row.items.length; }).concat(liveRows.slice(0, 3));
+    ].filter(function (row) { return row.items.length; }), liveRows.slice(0, 3));
   }
 
   function createCard(title, portrait) {
@@ -381,7 +428,7 @@
     var kind = section.dataset.live;
     var track = $(".rail-track", section);
     try {
-      var response = await fetch(kind === "tvmaze" ? "https://api.tvmaze.com/shows?page=0" : "https://api.sampleapis.com/movies/" + encodeURIComponent(kind), { credentials: "omit", cache: "force-cache" });
+      var response = await proxyFetch(kind === "tvmaze" ? "https://api.tvmaze.com/shows?page=0" : "https://api.sampleapis.com/movies/" + encodeURIComponent(kind), { cache: "force-cache" });
       if (!response.ok) throw new Error("Catalog unavailable");
       var json = await response.json();
       var items = kind === "tvmaze" ? json.slice(0, 30).map(function (show) {
@@ -457,7 +504,10 @@
     var backdrop = document.createElement("div");
     backdrop.className = "details-backdrop";
     var source = imageFor(title, true);
-    backdrop.style.backgroundImage = source ? 'url("' + source.replace(/"/g, "%22") + '")' : "none";
+    backdrop.style.backgroundImage = "none";
+    if (source) proxyRoute(source, "image").then(function (route) {
+      if (backdrop.isConnected) backdrop.style.backgroundImage = 'url("' + route.replace(/"/g, "%22") + '")';
+    }).catch(function () {});
     var close = document.createElement("button");
     close.className = "details-close"; close.type = "button"; close.setAttribute("aria-label", "Close details"); close.textContent = "×";
     close.addEventListener("click", function () { $("[data-details-dialog]").close(); });
@@ -522,7 +572,14 @@
   }
   function closeReader() { $("[data-reader]").hidden = true; }
   function openOfficial(title) {
-    if (title.officialUrl) window.open(title.officialUrl, "_blank", "noopener,noreferrer");
+    if (!title.officialUrl) return;
+    if (window.parent !== window) {
+      proxyRoute(title.officialUrl, "link").then(function () {
+        postShell({ type: "neo-shell:proxy-open", href: title.officialUrl, label: title.title || "Official film page" });
+      }).catch(function () { setPlayerMessage("The official page could not be routed through the NEO web proxy.", false); });
+      return;
+    }
+    window.open(title.officialUrl, "_blank", "noopener,noreferrer");
   }
   function setPlayerMessage(message, failed) {
     var status = $("[data-player-status]");
@@ -539,16 +596,24 @@
     activeResumeAt = Math.max(0, Number(resumeAt) || 0);
     var loadId = ++playerLoadId;
     setPlayerMessage(index ? "Switching to backup stream…" : "Loading stream…", false);
-    video.src = activeMediaSources[index];
-    video.load();
-    video.addEventListener("loadedmetadata", function restore() {
+    video.removeAttribute("src");
+    proxyRoute(activeMediaSources[index], "media").then(function (route) {
+      if (loadId !== playerLoadId || !route) return;
+      video.src = route;
+      video.load();
+      video.addEventListener("loadedmetadata", function restore() {
+        if (loadId !== playerLoadId) return;
+        if (activeResumeAt && activeResumeAt < video.duration - 10) video.currentTime = activeResumeAt;
+      }, { once: true });
+      video.addEventListener("canplay", function ready() {
+        if (loadId === playerLoadId) setPlayerMessage("", false);
+      }, { once: true });
+      video.play().catch(function () {});
+    }).catch(function () {
       if (loadId !== playerLoadId) return;
-      if (activeResumeAt && activeResumeAt < video.duration - 10) video.currentTime = activeResumeAt;
-    }, { once: true });
-    video.addEventListener("canplay", function ready() {
-      if (loadId === playerLoadId) setPlayerMessage("", false);
-    }, { once: true });
-    video.play().catch(function () {});
+      if (index + 1 < activeMediaSources.length) startPlayerSource(index + 1, activeResumeAt);
+      else setPlayerMessage("The NEO web proxy could not route this stream.", true);
+    });
   }
   function handlePlaybackError() {
     var player = $("[data-player]");
@@ -587,6 +652,7 @@
   }
   function closePlayer() {
     var video = $("[data-video]");
+    setShellPopout(false);
     persistProgress(true);
     activeMediaSources = [];
     activeMediaIndex = 0;
@@ -597,6 +663,89 @@
     video.load();
     setPlayerMessage("", false);
     $("[data-player]").hidden = true;
+  }
+  function postShell(message) {
+    if (window.parent !== window) window.parent.postMessage(message, "*");
+  }
+  function setShellPopout(active) {
+    active = Boolean(active && !$("[data-player]").hidden);
+    shellPopoutActive = active;
+    document.body.classList.toggle("media-popout", active);
+    document.documentElement.classList.toggle("media-popout", active);
+    $("[data-popout-controls]").hidden = !active;
+    $("[data-pip]").setAttribute("aria-pressed", String(active));
+    postShell({
+      type: "neo-shell:media-popout",
+      active: active,
+      mode: active ? "movies" : "",
+      title: activeTitle && activeTitle.title || "NEO Movies"
+    });
+  }
+  function beginPopoutDrag(event) {
+    if (!shellPopoutActive || event.button !== 0 || event.target.closest("button")) return;
+    var pointerId = event.pointerId;
+    if (event.currentTarget.setPointerCapture) event.currentTarget.setPointerCapture(pointerId);
+    event.preventDefault();
+    function send(phase, pointerEvent) {
+      postShell({
+        type: "neo-shell:media-popout-drag", phase: phase, pointerId: pointerId,
+        screenX: Number(pointerEvent.screenX) || 0, screenY: Number(pointerEvent.screenY) || 0
+      });
+    }
+    function move(moveEvent) { if (moveEvent.pointerId === pointerId) send("move", moveEvent); }
+    function end(endEvent) {
+      if (endEvent.pointerId !== pointerId) return;
+      send("end", endEvent);
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", end);
+      document.removeEventListener("pointercancel", end);
+    }
+    send("start", event);
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", end);
+    document.addEventListener("pointercancel", end);
+  }
+  function addVideoUpload(file) {
+    if (!file || !/^video\//i.test(file.type || "")) return;
+    var title = clean(String(file.name || "My video").replace(/\.[^.]+$/, "")) || "My video";
+    var route = URL.createObjectURL(file);
+    uploadedTitles.unshift({
+      id: "upload-" + uid(), title: title, type: "movie", year: String(new Date().getFullYear()),
+      genre: "Your upload", maturity: "", rating: "", description: "A video selected from this device.",
+      poster: "", backdrop: "", media: route, mediaFallbacks: [], userUpload: true
+    });
+    while (uploadedTitles.length > 12) {
+      var removed = uploadedTitles.pop();
+      if (removed && /^blob:/i.test(removed.media || "")) URL.revokeObjectURL(removed.media);
+    }
+    renderView("home");
+    openDetails(uploadedTitles[0]);
+  }
+  function resizeProfilePicture(file) {
+    if (!file || !/^image\/(?:png|jpeg|webp|gif)$/i.test(file.type || "") || file.size > 8 * 1024 * 1024) {
+      return Promise.reject(new Error("Choose an image smaller than 8 MB."));
+    }
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onerror = function () { reject(new Error("The image could not be read.")); };
+      reader.onload = function () {
+        var image = new Image();
+        image.onerror = function () { reject(new Error("The image could not be opened.")); };
+        image.onload = function () {
+          var canvas = document.createElement("canvas");
+          canvas.width = 256; canvas.height = 256;
+          var context = canvas.getContext("2d", { alpha: false });
+          var scale = Math.max(256 / image.naturalWidth, 256 / image.naturalHeight);
+          var width = image.naturalWidth * scale;
+          var height = image.naturalHeight * scale;
+          context.fillStyle = "#111"; context.fillRect(0, 0, 256, 256);
+          context.drawImage(image, (256 - width) / 2, (256 - height) / 2, width, height);
+          resolve(canvas.toDataURL("image/webp", .82));
+        };
+        image.src = String(reader.result || "");
+      };
+      reader.readAsDataURL(file);
+    });
   }
   function showSearch(query) {
     query = clean(query).toLowerCase();
@@ -625,7 +774,7 @@
     if (searchAbort) searchAbort.abort();
     if (query.length < 3 || currentView === "anime" || currentView === "manga" || currentView === "list") return;
     searchAbort = new AbortController();
-    fetch("https://api.tvmaze.com/search/shows?q=" + encodeURIComponent(query), { credentials: "omit", signal: searchAbort.signal })
+    proxyFetch("https://api.tvmaze.com/search/shows?q=" + encodeURIComponent(query), { signal: searchAbort.signal })
       .then(function (response) { if (!response.ok) throw new Error("Search unavailable"); return response.json(); })
       .then(function (matches) {
         matches.slice(0, 18).forEach(function (match) {
@@ -655,19 +804,19 @@
       try { Promise.resolve(context.registerTool(tool, { signal: lifecycle.signal })).catch(function () {}); } catch (error) {}
     }
     register({
-      name: "search_neo_stream", title: "Search NEO Stream",
-      description: "Search movies and series in the visible NEO Stream interface.",
+      name: "search_neo_movies", title: "Search NEO Movies",
+      description: "Search movies and series in the visible NEO Movies interface.",
       inputSchema: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 80 } }, required: ["query"], additionalProperties: false },
       annotations: { readOnlyHint: true, untrustedContentHint: true },
       execute: function (input) {
         if (!input || typeof input.query !== "string" || !input.query.trim()) throw new TypeError("query must be a non-empty string");
-        window.NEO_STREAM.search(input.query.trim());
+        window.NEO_MOVIES.search(input.query.trim());
         return { query: input.query.trim(), status: "visible" };
       }
     });
     register({
-      name: "open_neo_stream_title", title: "Open NEO Stream title",
-      description: "Open the details panel for a title from the bundled NEO Stream catalog.",
+      name: "open_neo_movies_title", title: "Open NEO Movies title",
+      description: "Open the details panel for a title from the bundled NEO Movies catalog.",
       inputSchema: { type: "object", properties: { id: { type: "string", minLength: 1, maxLength: 80 } }, required: ["id"], additionalProperties: false },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: function (input) {
@@ -685,6 +834,19 @@
     renderProfileGate(false);
     $("[data-manage-profiles]").addEventListener("click", function () { renderProfileGate(this.dataset.managing !== "true"); });
     $("[data-profile-save]").addEventListener("click", saveProfile);
+    $("[data-avatar-upload]").addEventListener("change", function () {
+      var file = this.files && this.files[0];
+      var form = $("[data-profile-form]");
+      var note = $("[data-avatar-upload-note]");
+      note.textContent = "Preparing picture…";
+      resizeProfilePicture(file).then(function (value) {
+        form.elements.avatar.value = "custom";
+        form.elements.avatarData.value = value;
+        $$("[data-avatar]", $("[data-profile-picture-picker]")).forEach(function (choice) { choice.setAttribute("aria-pressed", "false"); });
+        note.textContent = "Uploaded picture selected. It stays on this device.";
+      }).catch(function (error) { note.textContent = error.message || "The picture could not be used."; });
+      this.value = "";
+    });
     $("[data-profile-menu]").addEventListener("click", function () {
       $("[data-app-shell]").hidden = true; $("[data-profile-gate]").hidden = false; renderProfileGate(false);
     });
@@ -703,6 +865,11 @@
       searchTimer = window.setTimeout(function () { showSearch(value); }, 160);
     });
     $("[data-close-player]").addEventListener("click", closePlayer);
+    $("[data-video-upload]").addEventListener("click", function () { $("[data-video-file]").click(); });
+    $("[data-video-file]").addEventListener("change", function () {
+      addVideoUpload(this.files && this.files[0]);
+      this.value = "";
+    });
     $("[data-retry-player]").addEventListener("click", retryPlayer);
     $("[data-player-official]").addEventListener("click", function () { if (activeTitle) openOfficial(activeTitle); });
     $("[data-fullscreen-player]").addEventListener("click", function () {
@@ -715,6 +882,10 @@
     $("[data-close-reader]").addEventListener("click", closeReader);
     $("[data-pip]").addEventListener("click", function () {
       var video = $("[data-video]");
+      if (window.parent !== window) {
+        setShellPopout(!shellPopoutActive);
+        return;
+      }
       if (video.disablePictureInPicture) return;
       if (document.pictureInPictureElement && document.exitPictureInPicture) document.exitPictureInPicture().catch(function () {});
       else if (document.pictureInPictureEnabled && video.requestPictureInPicture) video.requestPictureInPicture().catch(function () {});
@@ -724,33 +895,39 @@
     });
     function syncPictureInPicture() {
       var video = $("[data-video]");
-      $("[data-pip]").setAttribute("aria-pressed", String(document.pictureInPictureElement === video || video.webkitPresentationMode === "picture-in-picture"));
+      $("[data-pip]").setAttribute("aria-pressed", String(shellPopoutActive || document.pictureInPictureElement === video || video.webkitPresentationMode === "picture-in-picture"));
     }
     ["enterpictureinpicture", "leavepictureinpicture", "webkitpresentationmodechanged"].forEach(function (type) {
       $("[data-video]").addEventListener(type, syncPictureInPicture);
     });
+    $("[data-restore-popout]").addEventListener("click", function () { setShellPopout(false); });
+    $("[data-popout-drag]").addEventListener("pointerdown", beginPopoutDrag);
     $("[data-video]").addEventListener("timeupdate", function () { persistProgress(false); }, { passive: true });
     $("[data-video]").addEventListener("ended", function () { persistProgress(true); });
     $("[data-video]").addEventListener("error", handlePlaybackError);
     $("[data-details-dialog]").addEventListener("click", function (event) { if (event.target === this) this.close(); });
     window.addEventListener("beforeunload", function () { persistProgress(true); });
+    window.addEventListener("pagehide", function () {
+      uploadedTitles.forEach(function (title) { if (/^blob:/i.test(title.media || "")) URL.revokeObjectURL(title.media); });
+    }, { once: true });
     window.addEventListener("keydown", function (event) {
       if (event.key !== "Escape") return;
       if (!$("[data-reader]").hidden) closeReader();
       else if (!$("[data-player]").hidden) closePlayer();
     });
-    document.addEventListener("visibilitychange", function () { if (document.hidden && !$("[data-player]").hidden) $("[data-video]").pause(); });
+    document.addEventListener("visibilitychange", function () { if (document.hidden && !shellPopoutActive && !$("[data-player]").hidden) $("[data-video]").pause(); });
     var id = "";
     try { id = sessionStorage.getItem(sessionKey) || ""; } catch (error) {}
     var selected = profiles().find(function (profile) { return profile.id === id; });
     if (selected) chooseProfile(selected);
     syncSettings();
-    window.NEO_STREAM = Object.freeze({
+    window.NEO_MOVIES = Object.freeze({
       showProfiles: function () { $("[data-app-shell]").hidden = true; $("[data-profile-gate]").hidden = false; renderProfileGate(false); },
       openTitle: function (id) { var title = catalog.find(function (item) { return item.id === id; }); if (title) openDetails(title); },
       search: function (query) { $("[data-search]").value = String(query || ""); showSearch(query); },
       openView: renderView
     });
+    window.NEO_STREAM = window.NEO_MOVIES;
     registerWebTools();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });

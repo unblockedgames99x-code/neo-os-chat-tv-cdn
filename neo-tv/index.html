@@ -1,23 +1,24 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script src="../neo-ad-shield.js?v=20260910-sitewide-v1"></script>
+  <script src="../neo-ad-shield.js?v=20260912-sitewide-v2"></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
   <meta name="theme-color" content="#000000">
-  <meta name="description" content="NEO Stream — a fast, profile-based cinema built into NEO OS.">
-  <title>NEO Stream</title>
+  <meta name="description" content="NEO Movies — a fast, profile-based cinema built into NEO OS.">
+  <title>NEO Movies</title>
   <script src="../neo-app-theme.js?v=20260907-theme-system-v2"></script>
   <link rel="stylesheet" href="../neo-theme-system.css?v=20260907-theme-system-v2">
-  <link rel="stylesheet" href="../neo-fonts.css?v=20260906-select-contrast-v2">
-  <link rel="preconnect" href="https://occ-0-8782-2219.1.nflxso.net">
-  <link rel="stylesheet" href="./app.css?v=20260910-netflix-classics-v1">
-  <script defer src="./catalog.js?v=20260910-open-streaming-v1"></script>
-  <script defer src="./app.js?v=20260910-netflix-classics-v1"></script>
+  <link rel="stylesheet" href="../neo-fonts.css?v=20260912-native-fast-v1">
+  <link rel="stylesheet" href="./app.css?v=20260912-movies-v2">
+  <script src="../neo-link-proxy.js?v=20260912-sitewide-v2"></script>
+  <script src="../neo-proxy-client.js?v=20260912-sitewide-v2"></script>
+  <script defer src="./catalog.js?v=20260912-open-movies-v2"></script>
+  <script defer src="./app.js?v=20260912-movies-v2"></script>
 </head>
 <body>
   <div class="app-shell" data-app-shell hidden>
-    <aside class="side-nav" aria-label="NEO Stream navigation">
+    <aside class="side-nav" aria-label="NEO Movies navigation">
       <nav>
         <button class="nav-button is-active" type="button" data-view="home" title="Home" aria-label="Home">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></svg><span>Home</span>
@@ -31,6 +32,9 @@
         <button class="nav-button" type="button" data-view="list" title="My List" aria-label="My List">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4Z"/></svg><span>My List</span>
         </button>
+        <button class="nav-button" type="button" data-video-upload title="Add your video" aria-label="Add your video">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 13v6h14v-6"/></svg><span>Uploads</span>
+        </button>
       </nav>
       <button class="nav-button nav-bottom" type="button" data-open-settings title="Settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3h4v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg><span>Settings</span>
@@ -39,7 +43,7 @@
 
     <main class="content" data-content>
       <header class="topbar">
-        <div class="wordmark"><strong>NEO</strong><span>STREAM</span></div>
+        <div class="wordmark"><strong>NEO</strong><span>MOVIES</span></div>
         <div class="top-actions">
           <label class="search-box">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
@@ -65,13 +69,14 @@
 
       <section class="rails" data-rails aria-live="polite"></section>
       <section class="search-results" data-search-results hidden><h2>Search</h2><div class="search-grid" data-search-grid></div><p class="empty-state" data-search-empty hidden>No titles found.</p></section>
-      <footer><strong>NEO STREAM</strong><span>Local profiles. Theme synced. Lightweight by design.</span></footer>
+      <footer><strong>NEO MOVIES</strong><span>Open films, public discovery and your uploads. No account required.</span></footer>
     </main>
   </div>
 
   <section class="profile-gate" data-profile-gate aria-labelledby="profile-title">
-    <div class="profile-brand"><span>N</span><strong>NEO STREAM</strong></div>
+    <div class="profile-brand"><img src="../assets/movies-icon.webp" alt=""><strong>NEO MOVIES</strong></div>
     <div class="profile-panel">
+      <img class="profile-logo" src="../assets/movies-icon.webp" alt="NEO Movies">
       <span class="eyebrow">LOCAL PROFILES</span>
       <h1 id="profile-title">Who's watching?</h1>
       <p>No account or sign-in. Profiles stay on this device.</p>
@@ -82,23 +87,23 @@
 
   <dialog class="dialog" data-profile-dialog>
     <form method="dialog" data-profile-form>
-      <button class="close" value="cancel" aria-label="Close">×</button>
+      <button class="close" value="cancel" formnovalidate aria-label="Close">×</button>
       <span class="eyebrow">PROFILE</span><h2 data-profile-dialog-title>Add profile</h2>
       <label>Name<input name="name" maxlength="18" autocomplete="off" required placeholder="Profile name"></label>
-      <fieldset class="profile-picture-fieldset"><legend>Profile picture</legend><input type="hidden" name="avatar" value="netflix-blue"><div class="profile-picture-picker" data-profile-picture-picker role="group" aria-label="Choose a profile picture"></div></fieldset>
+      <fieldset class="profile-picture-fieldset"><legend>Profile picture</legend><input type="hidden" name="avatar" value="classic-01"><input type="hidden" name="avatarData" value=""><div class="profile-picture-picker" data-profile-picture-picker role="group" aria-label="Choose a profile picture"></div><label class="avatar-upload">Upload your own<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-avatar-upload></label><p class="upload-note" data-avatar-upload-note>Images are resized and stored only on this device.</p></fieldset>
       <label>Profile color<select name="color"><option value="#77d5ff">Sky</option><option value="#ff5f75">Coral</option><option value="#b796ff">Violet</option><option value="#62e6a6">Mint</option><option value="#ffc25a">Amber</option></select></label>
       <label class="check"><input type="checkbox" name="kids"> Kids profile</label>
-      <div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button value="save" class="primary" data-profile-save>Save</button></div>
+      <div class="dialog-actions"><button value="cancel" class="secondary" formnovalidate>Cancel</button><button value="save" class="primary" data-profile-save>Save</button></div>
     </form>
   </dialog>
 
   <dialog class="dialog settings-dialog" data-settings-dialog>
     <form method="dialog">
       <button class="close" value="cancel" aria-label="Close">×</button>
-      <span class="eyebrow">NEO STREAM</span><h2>Playback & data</h2>
+      <span class="eyebrow">NEO MOVIES</span><h2>Playback & data</h2>
       <label class="check"><input type="checkbox" data-data-saver> Data saver (smaller images)</label>
       <label class="check"><input type="checkbox" data-autoplay-preview> Autoplay previews</label>
-      <p class="dialog-note">The Streaming now row plays open films directly. Discovery rows use public movie and TV catalogs and link to official title pages.</p>
+      <p class="dialog-note">The Streaming now row contains openly released films. Discovery rows use public catalogs and link to official title pages. Your uploaded videos stay in this session.</p>
       <div class="dialog-actions"><button value="cancel" class="primary">Done</button></div>
     </form>
   </dialog>
@@ -110,11 +115,14 @@
   <section class="player" data-player hidden aria-label="Video player">
     <video data-video controls playsinline preload="metadata"></video>
     <div class="player-top"><strong data-player-title></strong><div><button type="button" data-fullscreen-player>Full screen</button><button type="button" data-pip>Pop out</button><button type="button" data-close-player>Close</button></div></div>
+    <div class="popout-controls" data-popout-controls hidden><div class="popout-drag" data-popout-drag title="Drag video" aria-label="Drag popped-out video"><span></span></div><button type="button" data-restore-popout>Restore</button></div>
     <div class="player-status" data-player-status hidden role="status" aria-live="polite">
       <p data-player-message></p>
       <div><button type="button" class="primary" data-retry-player hidden>Retry stream</button><button type="button" class="secondary" data-player-official hidden>Official film page</button></div>
     </div>
   </section>
+
+  <input class="visually-hidden" type="file" accept="video/*" data-video-file>
 
   <section class="manga-reader" data-reader hidden aria-label="Manga reader">
     <header class="reader-top"><div><span class="eyebrow">NEO MANGA</span><strong data-reader-title></strong><small data-reader-meta></small></div><button type="button" data-close-reader>Close</button></header>
