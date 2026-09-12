@@ -104,6 +104,48 @@
     return client.resolve(value, kind || "fetch");
   }
 
+  function coverCandidates(value) {
+    var source = safeWebUrl(value, ASSET_BASE);
+    if (!source) return [];
+    var candidates = [source];
+    try {
+      var url = new URL(source);
+      if (/^(?:cdn|fastly|gcore)\.jsdelivr\.net$/i.test(url.hostname)) {
+        ["cdn.jsdelivr.net", "fastly.jsdelivr.net", "gcore.jsdelivr.net"].forEach(function (hostname) {
+          var alternate = new URL(url.href);
+          alternate.hostname = hostname;
+          candidates.push(alternate.href);
+        });
+      }
+    } catch (_error) {}
+    return candidates.filter(function (candidate, index, list) { return list.indexOf(candidate) === index; });
+  }
+
+  function loadCoverImage(image, value) {
+    var candidates = coverCandidates(value);
+    var index = 0;
+    function tryNext() {
+      if (index >= candidates.length) {
+        image.remove();
+        return;
+      }
+      var source = candidates[index++];
+      proxyResource(source, "image").then(function (route) {
+        image.onerror = function () {
+          image.onerror = null;
+          image.removeAttribute("src");
+          tryNext();
+        };
+        image.onload = function () {
+          image.dataset.neoCoverReady = "true";
+          image.dataset.neoCoverSource = source;
+        };
+        image.src = route;
+      }).catch(tryNext);
+    }
+    tryNext();
+  }
+
   function normalizeGame(entry, index) {
     if (!Array.isArray(entry) || entry.length < 4) return null;
     var source = String(entry[0] || "Unknown source").trim() || "Unknown source";
@@ -161,11 +203,8 @@
       image.loading = "lazy";
       image.decoding = "async";
       image.fetchPriority = "low";
-      proxyResource(game.img, "image").then(function (source) {
-        if (image.isConnected) image.src = source;
-      }).catch(function () { image.remove(); });
-      image.addEventListener("error", function () { image.remove(); }, { once: true });
       cover.appendChild(image);
+      loadCoverImage(image, game.img);
     }
     var play = document.createElement("span");
     play.className = "play-mark";
