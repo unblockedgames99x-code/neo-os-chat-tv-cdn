@@ -715,9 +715,19 @@
     $("[data-close-reader]").addEventListener("click", closeReader);
     $("[data-pip]").addEventListener("click", function () {
       var video = $("[data-video]");
-      if (!document.pictureInPictureEnabled || video.disablePictureInPicture) return;
-      if (document.pictureInPictureElement) document.exitPictureInPicture().catch(function () {});
-      else video.requestPictureInPicture().catch(function () {});
+      if (video.disablePictureInPicture) return;
+      if (document.pictureInPictureElement && document.exitPictureInPicture) document.exitPictureInPicture().catch(function () {});
+      else if (document.pictureInPictureEnabled && video.requestPictureInPicture) video.requestPictureInPicture().catch(function () {});
+      else if (video.webkitSetPresentationMode) {
+        try { video.webkitSetPresentationMode(video.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture"); } catch (_error) {}
+      }
+    });
+    function syncPictureInPicture() {
+      var video = $("[data-video]");
+      $("[data-pip]").setAttribute("aria-pressed", String(document.pictureInPictureElement === video || video.webkitPresentationMode === "picture-in-picture"));
+    }
+    ["enterpictureinpicture", "leavepictureinpicture", "webkitpresentationmodechanged"].forEach(function (type) {
+      $("[data-video]").addEventListener(type, syncPictureInPicture);
     });
     $("[data-video]").addEventListener("timeupdate", function () { persistProgress(false); }, { passive: true });
     $("[data-video]").addEventListener("ended", function () { persistProgress(true); });

@@ -102,5 +102,14 @@ footer{padding:30px clamp(24px,4vw,58px) 50px;display:flex;gap:14px;color:var(--
 @media(max-width:720px){.side-nav nav{justify-content:flex-start;overflow-x:auto;scrollbar-width:none}.side-nav nav::-webkit-scrollbar{display:none}.side-nav nav .nav-button{flex:0 0 44px;width:44px}}
 @media(max-width:720px){.rail-track.is-poster-rail{grid-auto-columns:min(48vw,190px)}}
 @media(max-width:480px){.profile-picture-picker{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (pointer: coarse) and (max-width: 1366px) {
+  .player-top { opacity: 1; padding-top: max(18px, env(safe-area-inset-top)); padding-left: max(22px, env(safe-area-inset-left)); padding-right: max(22px, env(safe-area-inset-right)); }
+  .player-top button, .reader-top button, .nav-button { min-height: 44px; }
+}
+@media (max-width: 720px) {
+  .side-nav { height: calc(64px + env(safe-area-inset-bottom)); padding-bottom: calc(6px + env(safe-area-inset-bottom)); }
+  .content { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .topbar { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition-duration:.01ms!important}.hero-image{transform:none!important}}
 @media(prefers-reduced-data:reduce){.hero-image{background-image:none!important}.poster img{visibility:hidden}}
