@@ -28,10 +28,31 @@
   var catalogIndex = Object.create(null);
   var libraryState = null;
   var searchState = null;
-  var avatarSprite = "./assets/profile-avatars-v1.webp";
-  var profileAvatars = Array.from({ length: 16 }, function (_, index) {
-    return { id: "classic-" + String(index + 1).padStart(2, "0"), label: "Classic character " + (index + 1), spriteIndex: index };
-  });
+  var profileAvatars = [
+    { id: "classic-01", label: "Scarlett Chilleez", src: "./assets/profile-classics/scarlett-chilleez.png" },
+    { id: "classic-02", label: "Sunny Chilleez", src: "./assets/profile-classics/sunny-chilleez.png" },
+    { id: "classic-03", label: "Dusty Chilleez", src: "./assets/profile-classics/dusty-chilleez.png" },
+    { id: "classic-04", label: "Purple Superhero", src: "./assets/profile-classics/purple-superhero.png" },
+    { id: "classic-05", label: "Moustache", src: "./assets/profile-classics/moustache.png" },
+    { id: "classic-06", label: "Dog", src: "./assets/profile-classics/dog.png" },
+    { id: "classic-07", label: "Red Superhero", src: "./assets/profile-classics/red-superhero.png" },
+    { id: "classic-08", label: "Purple Penguin", src: "./assets/profile-classics/purple-penguin.png" },
+    { id: "classic-09", label: "Robin Chilleez", src: "./assets/profile-classics/robin-chilleez.png" },
+    { id: "classic-10", label: "Pink Giggle", src: "./assets/profile-classics/pink-giggle.png" },
+    { id: "classic-11", label: "Chicken", src: "./assets/profile-classics/chicken.png" },
+    { id: "classic-12", label: "Eyepatch", src: "./assets/profile-classics/eyepatch.png" },
+    { id: "classic-13", label: "Alien", src: "./assets/profile-classics/alien.png" },
+    { id: "classic-14", label: "Robot", src: "./assets/profile-classics/robot.png" },
+    { id: "classic-15", label: "Mummy", src: "./assets/profile-classics/mummy.png" },
+    { id: "classic-16", label: "Helmet", src: "./assets/profile-classics/helmet.png" },
+    { id: "classic-17", label: "Red Smile", src: "./assets/profile-classics/red-smile.png" },
+    { id: "classic-18", label: "Dark Grey Smile", src: "./assets/profile-classics/dark-grey-smile.png" },
+    { id: "classic-19", label: "Yellow Smile", src: "./assets/profile-classics/yellow-smile.png" },
+    { id: "classic-20", label: "Green Smile", src: "./assets/profile-classics/green-smile.png" },
+    { id: "classic-21", label: "Purple Smile", src: "./assets/profile-classics/purple-smile.png" },
+    { id: "classic-22", label: "Pink Smile", src: "./assets/profile-classics/pink-smile.png" },
+    { id: "classic-23", label: "Blue Classic Icon", src: "./assets/profile-classics/blue-classic-icon.png" }
+  ];
   try { requestedView = new URLSearchParams(location.search).get("view") || ""; } catch (error) {}
   var initialView = ["home", "movies", "series", "anime", "manga", "list"].indexOf(requestedView) !== -1 ? requestedView : "home";
   var currentView = initialView;
@@ -155,24 +176,16 @@
     node.style.removeProperty("background-image");
     node.style.removeProperty("background-position");
     node.style.removeProperty("background-size");
-    if (avatar.src) {
-      var image = document.createElement("img");
-      image.src = avatar.src;
-      image.alt = "";
-      image.loading = "lazy";
-      image.decoding = "async";
-      image.addEventListener("error", function () {
-        node.classList.remove("has-profile-picture");
-        node.textContent = initials(profile && profile.name || avatar.label);
-      }, { once: true });
-      node.appendChild(image);
-    } else {
-      var column = avatar.spriteIndex % 4;
-      var row = Math.floor(avatar.spriteIndex / 4);
-      node.style.backgroundImage = 'url("' + avatarSprite + '")';
-      node.style.backgroundSize = "400% 400%";
-      node.style.backgroundPosition = (column * 100 / 3) + "% " + (row * 100 / 3) + "%";
-    }
+    var image = document.createElement("img");
+    image.src = avatar.src;
+    image.alt = "";
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.addEventListener("error", function () {
+      node.classList.remove("has-profile-picture");
+      node.textContent = initials(profile && profile.name || avatar.label);
+    }, { once: true });
+    node.appendChild(image);
     node.setAttribute("aria-hidden", "true");
   }
   function renderAvatarPicker(selectedId) {
