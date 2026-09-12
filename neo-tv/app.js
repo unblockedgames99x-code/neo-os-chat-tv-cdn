@@ -18,6 +18,7 @@
   var heroImageRequest = 0;
   var activeMediaSources = [];
   var activeMediaIndex = 0;
+  var activeDirectMediaIndex = -1;
   var activeResumeAt = 0;
   var activePlayerMode = "";
   var activePlayerProvider = "vidcore";
@@ -971,6 +972,7 @@
     var video = ensureVideo();
     if (!activeMediaSources[index]) return;
     activeMediaIndex = index;
+    activeDirectMediaIndex = -1;
     activeResumeAt = Math.max(0, Number(resumeAt) || 0);
     var loadId = ++playerLoadId;
     setPlayerMessage(index ? "Switching to backup stream…" : "Loading stream…", false);
@@ -998,6 +1000,22 @@
     var video = $("[data-video]");
     if (player.hidden || !activeMediaSources.length) return;
     var resumeAt = Math.max(activeResumeAt, Number(video.currentTime) || 0);
+    if (activeDirectMediaIndex !== activeMediaIndex && /^https:\/\//i.test(activeMediaSources[activeMediaIndex])) {
+      activeDirectMediaIndex = activeMediaIndex;
+      var loadId = ++playerLoadId;
+      setPlayerMessage("The proxy stream was blocked by its host. Connecting directly…", false);
+      video.src = activeMediaSources[activeMediaIndex];
+      video.load();
+      video.addEventListener("loadedmetadata", function restoreDirect() {
+        if (loadId !== playerLoadId) return;
+        if (resumeAt && resumeAt < video.duration - 10) video.currentTime = resumeAt;
+      }, { once: true });
+      video.addEventListener("canplay", function readyDirect() {
+        if (loadId === playerLoadId) setPlayerMessage("", false);
+      }, { once: true });
+      video.play().catch(function () {});
+      return;
+    }
     if (activeMediaIndex + 1 < activeMediaSources.length) {
       startPlayerSource(activeMediaIndex + 1, resumeAt);
       return;
@@ -1053,6 +1071,7 @@
     persistProgress(true);
     activeMediaSources = [];
     activeMediaIndex = 0;
+    activeDirectMediaIndex = -1;
     activeResumeAt = 0;
     playerLoadId += 1;
     video.pause();
