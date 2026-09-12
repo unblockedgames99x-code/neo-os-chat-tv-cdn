@@ -22,6 +22,11 @@
   var playerLoadId = 0;
   var uploadedTitles = [];
   var shellPopoutActive = false;
+  var catalogApi = "https://vrcwat.ch/web/catalog";
+  var catalogPageSize = 36;
+  var catalogIndex = Object.create(null);
+  var libraryState = null;
+  var searchState = null;
   var avatarSprite = "./assets/profile-avatars-v1.webp";
   var profileAvatars = Array.from({ length: 16 }, function (_, index) {
     return { id: "classic-" + String(index + 1).padStart(2, "0"), label: "Classic character " + (index + 1), spriteIndex: index };
@@ -29,6 +34,8 @@
   try { requestedView = new URLSearchParams(location.search).get("view") || ""; } catch (error) {}
   var initialView = ["home", "movies", "series", "anime", "manga", "list"].indexOf(requestedView) !== -1 ? requestedView : "home";
   var currentView = initialView;
+
+  catalog.forEach(function (title) { if (title && title.id) catalogIndex[title.id] = title; });
 
   function $(selector, root) { return (root || document).querySelector(selector); }
   function $$(selector, root) { return Array.from((root || document).querySelectorAll(selector)); }
@@ -58,6 +65,63 @@
     if (proxy && typeof proxy.fetch === "function") return proxy.fetch(value, options);
     if (window.parent !== window) return Promise.reject(new Error("The NEO web proxy is unavailable."));
     return fetch(value, Object.assign({ credentials: "omit", cache: "no-store" }, options || {}));
+  }
+  function catalogUrl(path, params) {
+    var query = new URLSearchParams();
+    Object.keys(params || {}).forEach(function (key) {
+      if (key === "label") return;
+      var value = params[key];
+      if (value !== "" && value != null) query.set(key, String(value));
+    });
+    return catalogApi + "/" + path + (query.toString() ? "?" + query.toString() : "");
+  }
+  function catalogType(value) {
+    return value === "m" ? "movie" : (value === "tv" ? "series" : (value === "a" ? "anime" : "movie"));
+  }
+  function catalogTitle(item, rowGenre) {
+    var type = catalogType(item && item.type);
+    var providerId = String(item && item.id || "");
+    var rating = parseFloat(String(item && item.rating || ""));
+    var officialUrl = type === "anime" ? "https://anilist.co/anime/" + encodeURIComponent(providerId) :
+      "https://www.themoviedb.org/" + (type === "series" ? "tv" : "movie") + "/" + encodeURIComponent(providerId);
+    return {
+      id: "catalog-" + (item && item.type || "m") + "-" + providerId,
+      title: clean(item && item.title || "Untitled"),
+      type: type,
+      year: clean(item && item.year || "").slice(0, 4),
+      genre: rowGenre || (type === "series" ? "Series" : (type === "anime" ? "Anime" : "Movie")),
+      maturity: "",
+      rating: Number.isFinite(rating) ? rating : "",
+      description: clean(item && item.overview) || "Explore this title and find an official place to watch.",
+      poster: /^https:\/\//i.test(String(item && item.posterUrl || "")) ? item.posterUrl : "",
+      backdrop: /^https:\/\//i.test(String(item && item.backdropUrl || "")) ? item.backdropUrl : "",
+      officialUrl: officialUrl,
+      provider: "public-catalog",
+      providerId: providerId
+    };
+  }
+  function rememberTitles(items) {
+    return items.map(function (title) {
+      var existing = catalogIndex[title.id];
+      if (existing) return existing;
+      catalogIndex[title.id] = title;
+      catalog.push(title);
+      return title;
+    });
+  }
+  function fetchCatalogPage(path, params, signal) {
+    return proxyFetch(catalogUrl(path, params), { cache: "force-cache", signal: signal }).then(function (response) {
+      if (!response.ok) throw new Error("Catalog unavailable");
+      return response.json();
+    }).then(function (payload) {
+      var genre = params && params.label || "";
+      var results = Array.isArray(payload && payload.results) ? payload.results : [];
+      return {
+        page: Number(payload && payload.page) || Number(params && params.page) || 1,
+        hasMore: Boolean(payload && payload.hasMore),
+        items: rememberTitles(results.map(function (item) { return catalogTitle(item, genre); }))
+      };
+    });
   }
   function profileAvatar(profile) {
     if (profile && profile.avatar === "custom" && /^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(String(profile.avatarData || ""))) {
@@ -343,29 +407,39 @@
     }, 80);
   }
 
-  var liveRows = [
-    { title: "Animation & family", endpoint: "animation" },
-    { title: "Comedies", endpoint: "comedy" },
-    { title: "Drama", endpoint: "drama" },
-    { title: "Science fiction & fantasy", endpoint: "scifi-fantasy" },
-    { title: "Mystery", endpoint: "mystery" },
-    { title: "Classics", endpoint: "classic" }
+  var movieRows = [
+    { title: "Popular movies", catalog: { path: "discover", params: { type: "m", sort: "popular", label: "Popular" } } },
+    { title: "Top rated", catalog: { path: "discover", params: { type: "m", sort: "rating", label: "Top rated" } } },
+    { title: "New releases", catalog: { path: "discover", params: { type: "m", sort: "release_date", label: "New release" } } },
+    { title: "Action", catalog: { path: "discover", params: { type: "m", sort: "popular", genre: "28", label: "Action" } } },
+    { title: "Comedies", catalog: { path: "discover", params: { type: "m", sort: "popular", genre: "35", label: "Comedy" } } },
+    { title: "Science fiction", catalog: { path: "discover", params: { type: "m", sort: "popular", genre: "878", label: "Science fiction" } } },
+    { title: "Animation & family", catalog: { path: "discover", params: { type: "m", sort: "popular", genre: "16", label: "Animation" } } }
+  ];
+  var seriesRows = [
+    { title: "Popular series", catalog: { path: "discover", params: { type: "tv", sort: "popular", label: "Series" } } },
+    { title: "Top rated series", catalog: { path: "discover", params: { type: "tv", sort: "rating", label: "Top rated series" } } },
+    { title: "New series", catalog: { path: "discover", params: { type: "tv", sort: "release_date", label: "New series" } } }
+  ];
+  var animeRows = [
+    { title: "Popular anime", catalog: { path: "discover", params: { type: "a", sort: "popular", label: "Anime" } } },
+    { title: "Top rated anime", catalog: { path: "discover", params: { type: "a", sort: "rating", label: "Top rated anime" } } }
   ];
   function rowsFor(view) {
     var data = currentData();
     var items = allowedCatalog();
     var streaming = items.filter(function (item) { return item.type === "movie" && streamSources(item).length; });
-    if (view === "movies") return (uploadedTitles.length ? [{ title: "Your uploads", items: uploadedTitles, portrait: true }] : []).concat([{ title: "Streaming now", items: streaming, portrait: true, emptyMessage: "No playable films are available right now." }], liveRows);
-    if (view === "series") return [{ title: "Discover series", tvmaze: true }];
-    if (view === "anime") return [{ title: "Anime", items: [], emptyMessage: "No verified anime titles are available yet." }];
+    if (view === "movies") return (uploadedTitles.length ? [{ title: "Your uploads", items: uploadedTitles, portrait: true }] : []).concat([{ title: "Open films", items: streaming, portrait: true, emptyMessage: "No playable films are available right now." }], movieRows);
+    if (view === "series") return seriesRows;
+    if (view === "anime") return animeRows;
     if (view === "manga") return [{ title: "Manga", items: [], portrait: true, emptyMessage: "No verified manga titles are available yet." }];
     if (view === "list") return [{ title: "My List", items: items.filter(function (item) { return data.list.indexOf(item.id) !== -1; }), emptyMessage: "Your list is empty." }];
     var progressItems = Object.keys(data.progress).map(function (id) { return items.find(function (item) { return item.id === id; }); }).filter(Boolean);
     return (uploadedTitles.length ? [{ title: "Your uploads", items: uploadedTitles, portrait: true }] : []).concat([
       { title: "Continue watching", items: progressItems },
-      { title: "Streaming now", items: streaming.slice(0, 12), portrait: true },
-      { title: "Series", items: items.filter(function (item) { return item.type === "series"; }).slice(0, 12) }
-    ].filter(function (row) { return row.items.length; }), liveRows.slice(0, 3));
+      { title: "Open films", items: streaming.slice(0, 12), portrait: true },
+      { title: "Trending now", catalog: { path: "top", params: { type: "all", recentOnly: "true", label: "Trending" } } }
+    ].filter(function (row) { return !row.items || row.items.length; }), [movieRows[0], seriesRows[0]]);
   }
 
   function createCard(title, portrait) {
@@ -406,40 +480,22 @@
         track.appendChild(empty);
       }
     }
-    else {
-      section.dataset.live = row.endpoint || (row.tvmaze ? "tvmaze" : "");
+    else if (row.catalog) {
+      section.dataset.live = "catalog";
+      section._neoCatalogRequest = row.catalog;
       track.innerHTML = '<div class="rail-skeleton"></div><div class="rail-skeleton"></div><div class="rail-skeleton"></div>';
     }
     return section;
   }
-  function sampleTitle(item, index, endpoint) {
-    return {
-      id: "sample-" + endpoint + "-" + String(item.imdbId || item.id || index),
-      title: clean(item.title || "Untitled"), type: "movie", year: "", genre: endpoint.replace("-", " "), maturity: "", rating: "",
-      description: "Explore this title and find an official place to watch.",
-      poster: /^https:\/\//i.test(item.posterURL || "") ? item.posterURL : "",
-      backdrop: /^https:\/\//i.test(item.posterURL || "") ? item.posterURL : "",
-      officialUrl: item.imdbId ? "https://www.imdb.com/title/" + encodeURIComponent(item.imdbId) + "/" : ""
-    };
-  }
   async function loadLiveRail(section) {
     if (section.dataset.loaded === "true") return;
     section.dataset.loaded = "true";
-    var kind = section.dataset.live;
     var track = $(".rail-track", section);
     try {
-      var response = await proxyFetch(kind === "tvmaze" ? "https://api.tvmaze.com/shows?page=0" : "https://api.sampleapis.com/movies/" + encodeURIComponent(kind), { cache: "force-cache" });
-      if (!response.ok) throw new Error("Catalog unavailable");
-      var json = await response.json();
-      var items = kind === "tvmaze" ? json.slice(0, 30).map(function (show) {
-        return {
-          id: "tvmaze-" + show.id, title: clean(show.name), type: "series", year: String(show.premiered || "").slice(0, 4),
-          genre: (show.genres || [])[0] || "Series", rating: show.rating && show.rating.average || "", maturity: "",
-          description: clean(show.summary) || "Discover this series.", poster: show.image && (show.image.medium || show.image.original),
-          backdrop: show.image && show.image.original, officialUrl: show.officialSite || show.url
-        };
-      }) : json.slice(0, 30).map(function (item, index) { return sampleTitle(item, index, kind); });
-      renderCards(track, items, true);
+      var request = section._neoCatalogRequest;
+      var payload = await fetchCatalogPage(request.path, Object.assign({ page: 1, limit: catalogPageSize }, request.params));
+      renderCards(track, payload.items, true);
+      if (!payload.items.length) throw new Error("Catalog is empty");
     } catch (error) {
       track.innerHTML = '<p class="rail-error">This row is temporarily unavailable.</p>';
       $(".rail-heading span", section).textContent = "OFFLINE";
@@ -453,10 +509,65 @@
     });
   }, { rootMargin: "500px 0px" });
 
+  function libraryType(view) {
+    return view === "movies" ? "m" : (view === "series" ? "tv" : (view === "anime" ? "a" : ""));
+  }
+  function makeLibrary(view) {
+    var type = libraryType(view);
+    if (!type) return null;
+    var section = document.createElement("section");
+    section.className = "library-section";
+    section.innerHTML = '<div class="library-heading"><div><span class="eyebrow">FULL CATALOGUE</span><h2>Browse all</h2></div><span data-library-count>LOADING</span></div><div class="library-grid" data-library-grid></div><button class="library-more" type="button" data-library-more>Load more</button>';
+    libraryState = { token: Date.now() + Math.random(), type: type, page: 0, loading: false, hasMore: true, count: 0, seen: Object.create(null), section: section };
+    var more = $("[data-library-more]", section);
+    more.addEventListener("click", loadNextLibraryPage);
+    libraryObserver.observe(more);
+    return section;
+  }
+  async function loadNextLibraryPage() {
+    var state = libraryState;
+    if (!state || state.loading || !state.hasMore || !state.section.isConnected) return;
+    state.loading = true;
+    var more = $("[data-library-more]", state.section);
+    more.disabled = true;
+    more.textContent = "Loading…";
+    try {
+      var payload = await fetchCatalogPage("discover", { type: state.type, page: state.page + 1, limit: catalogPageSize, sort: "popular" });
+      if (state !== libraryState || !state.section.isConnected) return;
+      var fragment = document.createDocumentFragment();
+      payload.items.forEach(function (title) {
+        if (state.seen[title.id]) return;
+        state.seen[title.id] = true;
+        state.count += 1;
+        fragment.appendChild(createCard(title, true));
+      });
+      $("[data-library-grid]", state.section).appendChild(fragment);
+      state.page = payload.page;
+      state.hasMore = payload.hasMore && payload.items.length > 0;
+      $("[data-library-count]", state.section).textContent = state.count + (state.hasMore ? "+ TITLES" : " TITLES");
+      more.hidden = !state.hasMore;
+      more.textContent = "Load more";
+    } catch (error) {
+      more.textContent = "Try loading more";
+    } finally {
+      if (state === libraryState) {
+        state.loading = false;
+        more.disabled = false;
+      }
+    }
+  }
+  var libraryObserver = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) { if (entry.isIntersecting) loadNextLibraryPage(); });
+  }, { rootMargin: "700px 0px" });
+
   function renderView(view) {
     if (["home", "movies", "series", "anime", "manga", "list"].indexOf(view) === -1) view = "home";
     currentView = view;
     clearInterval(heroTimer);
+    libraryObserver.disconnect();
+    libraryState = null;
+    if (searchAbort) searchAbort.abort();
+    searchState = null;
     $$(".nav-button[data-view]").forEach(function (button) { button.classList.toggle("is-active", button.dataset.view === view); });
     $("[data-search]").value = "";
     $("[data-search-results]").hidden = true;
@@ -469,6 +580,11 @@
       rails.appendChild(rail);
       if (rail.dataset.live) railObserver.observe(rail);
     });
+    var library = makeLibrary(view);
+    if (library) {
+      rails.appendChild(library);
+      loadNextLibraryPage();
+    }
     if (view !== "list" && view !== "manga") {
       var featured = allowedCatalog().filter(function (title) {
         if (!title.openSample) return false;
@@ -748,11 +864,15 @@
     });
   }
   function showSearch(query) {
-    query = clean(query).toLowerCase();
+    var searchQuery = clean(query);
+    var normalized = searchQuery.toLowerCase();
     var section = $("[data-search-results]");
     var grid = $("[data-search-grid]");
     var empty = $("[data-search-empty]");
-    if (!query) {
+    var more = $("[data-search-more]");
+    if (!normalized) {
+      if (searchAbort) searchAbort.abort();
+      searchState = null;
       section.hidden = true;
       $("[data-rails]").hidden = false;
       $("[data-hero]").hidden = currentView === "list" || currentView === "manga" || !activeTitle;
@@ -767,27 +887,63 @@
       var list = currentData().list;
       searchable = searchable.filter(function (title) { return list.indexOf(title.id) !== -1; });
     }
-    var local = searchable.filter(function (title) { return [title.title, title.genre, title.description].join(" ").toLowerCase().indexOf(query) >= 0; });
+    var local = searchable.filter(function (title) { return [title.title, title.genre, title.description].join(" ").toLowerCase().indexOf(normalized) >= 0; });
     grid.replaceChildren();
     local.forEach(function (title) { grid.appendChild(createCard(title, true)); });
-    empty.hidden = local.length > 0;
     if (searchAbort) searchAbort.abort();
-    if (query.length < 3 || currentView === "anime" || currentView === "manga" || currentView === "list") return;
+    searchState = {
+      query: searchQuery,
+      type: currentView === "movies" ? "m" : (currentView === "series" ? "tv" : (currentView === "anime" ? "a" : "all")),
+      page: 0,
+      loading: false,
+      hasMore: currentView !== "manga" && currentView !== "list" && normalized.length >= 2,
+      seen: Object.create(null)
+    };
+    local.forEach(function (title) { searchState.seen[title.id] = true; });
+    empty.textContent = searchState.hasMore ? "Searching the full catalogue…" : "No titles found.";
+    empty.hidden = local.length > 0;
+    more.hidden = true;
+    if (searchState.hasMore) loadNextSearchPage();
+  }
+  async function loadNextSearchPage() {
+    var state = searchState;
+    if (!state || state.loading || !state.hasMore) return;
+    state.loading = true;
+    var grid = $("[data-search-grid]");
+    var empty = $("[data-search-empty]");
+    var more = $("[data-search-more]");
+    more.hidden = false;
+    more.disabled = true;
+    more.textContent = "Searching…";
     searchAbort = new AbortController();
-    proxyFetch("https://api.tvmaze.com/search/shows?q=" + encodeURIComponent(query), { signal: searchAbort.signal })
-      .then(function (response) { if (!response.ok) throw new Error("Search unavailable"); return response.json(); })
-      .then(function (matches) {
-        matches.slice(0, 18).forEach(function (match) {
-          var show = match.show || {};
-          grid.appendChild(createCard({
-            id: "tvmaze-" + show.id, title: clean(show.name), type: "series", year: String(show.premiered || "").slice(0, 4),
-            genre: (show.genres || [])[0] || "Series", rating: show.rating && show.rating.average || "", maturity: "",
-            description: clean(show.summary), poster: show.image && (show.image.medium || show.image.original),
-            backdrop: show.image && show.image.original, officialUrl: show.officialSite || show.url
-          }, true));
-        });
-        empty.hidden = grid.children.length > 0;
-      }).catch(function (error) { if (error.name !== "AbortError") empty.hidden = grid.children.length > 0; });
+    try {
+      var payload = await fetchCatalogPage("search", { q: state.query, type: state.type, page: state.page + 1, limit: catalogPageSize }, searchAbort.signal);
+      if (state !== searchState) return;
+      var fragment = document.createDocumentFragment();
+      payload.items.forEach(function (title) {
+        if (state.seen[title.id]) return;
+        state.seen[title.id] = true;
+        fragment.appendChild(createCard(title, true));
+      });
+      grid.appendChild(fragment);
+      state.page = payload.page;
+      state.hasMore = payload.hasMore && payload.items.length > 0;
+      empty.textContent = "No titles found.";
+      empty.hidden = grid.children.length > 0;
+      more.hidden = !state.hasMore;
+      more.textContent = "Load more results";
+    } catch (error) {
+      if (state !== searchState || error.name === "AbortError") return;
+      empty.textContent = grid.children.length ? "" : "The catalogue search is temporarily unavailable.";
+      empty.hidden = grid.children.length > 0;
+      more.hidden = false;
+      more.textContent = "Try search again";
+    } finally {
+      if (state === searchState) {
+        state.loading = false;
+        more.disabled = false;
+      }
+    }
   }
   function syncSettings() {
     var value = getSettings();
@@ -864,6 +1020,7 @@
       clearTimeout(searchTimer);
       searchTimer = window.setTimeout(function () { showSearch(value); }, 160);
     });
+    $("[data-search-more]").addEventListener("click", loadNextSearchPage);
     $("[data-close-player]").addEventListener("click", closePlayer);
     $("[data-video-upload]").addEventListener("click", function () { $("[data-video-file]").click(); });
     $("[data-video-file]").addEventListener("change", function () {
@@ -923,7 +1080,7 @@
     syncSettings();
     window.NEO_MOVIES = Object.freeze({
       showProfiles: function () { $("[data-app-shell]").hidden = true; $("[data-profile-gate]").hidden = false; renderProfileGate(false); },
-      openTitle: function (id) { var title = catalog.find(function (item) { return item.id === id; }); if (title) openDetails(title); },
+      openTitle: function (id) { var title = catalogIndex[id]; if (title) openDetails(title); },
       search: function (query) { $("[data-search]").value = String(query || ""); showSearch(query); },
       openView: renderView
     });

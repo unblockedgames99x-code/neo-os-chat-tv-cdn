@@ -10,11 +10,11 @@
   <script src="../neo-app-theme.js?v=20260907-theme-system-v2"></script>
   <link rel="stylesheet" href="../neo-theme-system.css?v=20260907-theme-system-v2">
   <link rel="stylesheet" href="../neo-fonts.css?v=20260912-native-fast-v1">
-  <link rel="stylesheet" href="./app.css?v=20260912-movies-v2">
+  <link rel="stylesheet" href="./app.css?v=20260912-full-catalog-v1">
   <script src="../neo-link-proxy.js?v=20260912-sitewide-v2"></script>
   <script src="../neo-proxy-client.js?v=20260912-sitewide-v2"></script>
   <script defer src="./catalog.js?v=20260912-open-movies-v2"></script>
-  <script defer src="./app.js?v=20260912-movies-v2"></script>
+  <script defer src="./app.js?v=20260912-full-catalog-v1"></script>
 </head>
 <body>
   <div class="app-shell" data-app-shell hidden>
@@ -68,8 +68,8 @@
       </section>
 
       <section class="rails" data-rails aria-live="polite"></section>
-      <section class="search-results" data-search-results hidden><h2>Search</h2><div class="search-grid" data-search-grid></div><p class="empty-state" data-search-empty hidden>No titles found.</p></section>
-      <footer><strong>NEO MOVIES</strong><span>Open films, public discovery and your uploads. No account required.</span></footer>
+      <section class="search-results" data-search-results hidden><h2>Search</h2><div class="search-grid" data-search-grid></div><p class="empty-state" data-search-empty hidden>No titles found.</p><button class="library-more" type="button" data-search-more hidden>Load more results</button></section>
+      <footer><strong>NEO MOVIES</strong><span>Full movie and series metadata catalogue, open films, and your uploads. No account required.</span></footer>
     </main>
   </div>
 
@@ -103,7 +103,7 @@
       <span class="eyebrow">NEO MOVIES</span><h2>Playback & data</h2>
       <label class="check"><input type="checkbox" data-data-saver> Data saver (smaller images)</label>
       <label class="check"><input type="checkbox" data-autoplay-preview> Autoplay previews</label>
-      <p class="dialog-note">The Streaming now row contains openly released films. Discovery rows use public catalogs and link to official title pages. Your uploaded videos stay in this session.</p>
+      <p class="dialog-note">The Open films row contains openly released films. Catalogue titles link to their official metadata pages through the NEO web proxy. Your uploaded videos stay in this session.</p>
       <div class="dialog-actions"><button value="cancel" class="primary">Done</button></div>
     </form>
   </dialog>
