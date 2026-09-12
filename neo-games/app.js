@@ -2,18 +2,23 @@
   "use strict";
 
   var config = window.NEO_GAMES_CONFIG || {};
-  var CATALOG_URL = "https://nextnode9124.b-cdn.net/_o/g/catalog";
+  var CATALOG_URL = "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/scrapegames.js";
+  var CATALOG_URLS = [config.catalog || CATALOG_URL].concat(Array.isArray(config.catalogFallbacks) ? config.catalogFallbacks : []).filter(Boolean);
+  var ASSET_BASE = config.assetBase || "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/";
+  var EXECUTABLE_BASE = config.executableBase || "https://raw.githack.com/lauraevan/greatestgreatest-revive/main/";
   var chunkSize = Math.max(24, Math.min(72, Number(config.chunkSize) || 48));
-  var favoritesKey = "neo_games_favorites_v3";
-  var recentKey = "neo_games_recent_v3";
+  var favoritesKey = "neo_games_favorites_v4";
+  var recentKey = "neo_games_recent_v4";
   var catalog = [];
   var discoverCatalog = [];
   var gamesById = new Map();
-  var favorites = new Set(read(favoritesKey, read("neo_games_favorites_v2", [])));
-  var recent = read(recentKey, read("neo_games_recent_v2", []));
+  var sourceCounts = new Map();
+  var favorites = new Set(read(favoritesKey, []));
+  var recent = read(recentKey, []);
   var matches = [];
   var mode = "home";
   var category = "all";
+  var sortMode = "title-asc";
   var query = "";
   var visible = 0;
   var activeGame = null;
@@ -58,6 +63,40 @@
     }
   }
 
+  function executableGameUrl(value) {
+    var url = safeWebUrl(value, EXECUTABLE_BASE);
+    if (!url) return "";
+    var match = url.match(/^https?:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^@/]+)@([^/]+)\/(.+)$/i);
+    if (match) return safeWebUrl("https://raw.githack.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
+    match = url.match(/^https?:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
+    if (match) return safeWebUrl("https://raw.githack.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
+    match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:blob|raw)\/([^/]+)\/(.+)$/i);
+    if (match) return safeWebUrl("https://raw.githack.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
+    return url;
+  }
+
+  function absolutePlay(value) {
+    var source = String(value || "").trim();
+    if (!source) return "";
+    return executableGameUrl(/^(?:https?:)?\/\//i.test(source) ? source : new URL(source.replace(/^\.?\//, ""), EXECUTABLE_BASE).href);
+  }
+
+  function absoluteImage(value) {
+    var source = String(value || "").trim();
+    if (!source) return "";
+    return safeWebUrl(source, ASSET_BASE);
+  }
+
+  function stableId(value) {
+    var hash = 2166136261;
+    var text = String(value || "");
+    for (var index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return "ggr-" + (hash >>> 0).toString(36);
+  }
+
   function proxyResource(value, kind) {
     var client = window.NEO_PROXY_CLIENT;
     if (!client) return Promise.resolve(value);
@@ -66,27 +105,27 @@
   }
 
   function normalizeGame(entry, index) {
-    if (!entry || typeof entry !== "object") return null;
-    var id = String(entry.id == null ? "" : entry.id).trim();
-    var name = String(entry.name || "").trim();
-    var url = safeWebUrl(entry.url, CATALOG_URL);
-    if (!id || !name || !url) return null;
-    var categoryLabel = titleCase(entry.category);
+    if (!Array.isArray(entry) || entry.length < 4) return null;
+    var source = String(entry[0] || "Unknown source").trim() || "Unknown source";
+    var url = absolutePlay(entry[1]);
+    var name = String(entry[3] || "").replace(/\uFFFD/g, "").trim();
+    if (!name || !url) return null;
+    var id = stableId([source, name, url].join("|"));
     return {
       id: id,
       name: name,
-      category: categoryLabel,
-      categoryKey: normalize(categoryLabel) || "other",
+      category: source,
+      categoryKey: normalize(source) || "other",
       url: url,
-      img: safeWebUrl(entry.img, CATALOG_URL),
-      featured: entry.featured === true || entry.featured === 1 || entry.featured === "true",
+      img: absoluteImage(entry[2]),
+      featured: index < 96,
       index: index,
-      search: normalize([id, name, categoryLabel].join(" "))
+      search: normalize([name, source].join(" "))
     };
   }
 
   function saveFavorites() {
-    save(favoritesKey, Array.from(favorites).slice(0, 1372));
+    save(favoritesKey, Array.from(favorites).slice(0, 5000));
   }
 
   function remember(game) {
@@ -165,12 +204,8 @@
       if (!categories.has(game.categoryKey)) categories.set(game.categoryKey, { key: game.categoryKey, label: game.category, count: 0 });
       categories.get(game.categoryKey).count += 1;
     });
-    var preferred = ["arcade", "sports", "multiplayer", "puzzle", "action", "horror", "strategy", "racing", "sandbox"];
-    var order = new Map(preferred.map(function (key, index) { return [key, index]; }));
     var items = Array.from(categories.values()).sort(function (left, right) {
-      var leftOrder = order.has(left.key) ? order.get(left.key) : preferred.length;
-      var rightOrder = order.has(right.key) ? order.get(right.key) : preferred.length;
-      return leftOrder - rightOrder || right.count - left.count || left.label.localeCompare(right.label);
+      return right.count - left.count || left.label.localeCompare(right.label);
     });
     var host = $("[data-category-chips]");
     var fragment = document.createDocumentFragment();
@@ -188,6 +223,19 @@
     host.replaceChildren(fragment);
   }
 
+  function sortGames(items) {
+    return items.slice().sort(function (left, right) {
+      if (sortMode === "title-desc") return right.name.localeCompare(left.name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortMode === "source-asc") {
+        return left.category.localeCompare(right.category, undefined, { sensitivity: "base" }) || left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
+      }
+      if (sortMode === "source-size") {
+        return (sourceCounts.get(right.categoryKey) || 0) - (sourceCounts.get(left.categoryKey) || 0) || left.category.localeCompare(right.category) || left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
+      }
+      return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
+    });
+  }
+
   function filteredGames() {
     var items;
     if (mode === "recent") {
@@ -203,7 +251,7 @@
         return terms.every(function (term) { return game.search.indexOf(term) >= 0; });
       });
     }
-    return items;
+    return sortGames(items);
   }
 
   function updateHeading() {
@@ -214,7 +262,7 @@
     if (mode === "recent") { label = "PLAY AGAIN"; title = "Recently played"; }
     if (category !== "all") {
       var chip = $$("[data-category]").find(function (button) { return button.dataset.category === category; });
-      label = "CATEGORY";
+      label = "SOURCE";
       title = chip ? chip.textContent : titleCase(category);
     }
     if (query) { label = "SEARCH"; title = 'Results for "' + query + '"'; }
@@ -354,38 +402,49 @@
     }).observe(frame, { attributes: true, attributeFilter: ["data-neo-proxy-error"] });
   }
 
-  async function loadCatalog() {
-    if (config.catalog !== CATALOG_URL) throw new Error("Unexpected games catalogue source");
-    var controller = new AbortController();
-    var timer = window.setTimeout(function () { controller.abort(); }, 12000);
-    var response;
-    try {
-      response = await (window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.fetch === "function"
-        ? window.NEO_PROXY_CLIENT.fetch(CATALOG_URL, {
-          cache: "force-cache",
-          signal: controller.signal
-        })
-        : fetch(CATALOG_URL, {
-        credentials: "omit",
-        cache: "force-cache",
-        mode: "cors",
-        signal: controller.signal
-        }));
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!response.ok) throw new Error("Catalogue returned " + response.status);
-    var payload = await response.json();
-    if (!payload || !Array.isArray(payload.games)) throw new Error("Invalid Nextnode catalogue");
+  function parseCatalogScript(source) {
+    var marker = source.indexOf("window.SCRAPE_GAMES");
+    var start = source.indexOf("[", marker);
+    var end = source.lastIndexOf("];");
+    if (marker < 0 || start < 0 || end <= start) throw new Error("Invalid master scrape list");
+    var serialized = source.slice(start, end + 1).replace(/,\s*\]$/, "\n]");
+    var rows = JSON.parse(serialized);
+    if (!Array.isArray(rows)) throw new Error("Invalid master scrape list");
+    return rows;
+  }
 
+  async function fetchCatalogRows() {
+    var lastError = null;
+    for (var index = 0; index < CATALOG_URLS.length; index += 1) {
+      var controller = new AbortController();
+      var timer = window.setTimeout(function () { controller.abort(); }, 15000);
+      try {
+        var response = await (window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.fetch === "function"
+          ? window.NEO_PROXY_CLIENT.fetch(CATALOG_URLS[index], { cache: "force-cache", signal: controller.signal })
+          : fetch(CATALOG_URLS[index], { credentials: "omit", cache: "force-cache", mode: "cors", signal: controller.signal }));
+        if (!response.ok) throw new Error("Catalogue returned " + response.status);
+        return parseCatalogScript(await response.text());
+      } catch (error) {
+        lastError = error;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw lastError || new Error("The game catalogue is unavailable");
+  }
+
+  async function loadCatalog() {
+    var rows = await fetchCatalogRows();
     var seen = new Set();
-    catalog = payload.games.map(normalizeGame).filter(function (game) {
+    catalog = rows.map(normalizeGame).filter(function (game) {
       if (!game || seen.has(game.id)) return false;
       seen.add(game.id);
       return true;
     });
-    if (!catalog.length) throw new Error("Nextnode catalogue is empty");
+    if (!catalog.length) throw new Error("The master game catalogue is empty");
     gamesById = new Map(catalog.map(function (game) { return [game.id, game]; }));
+    sourceCounts = new Map();
+    catalog.forEach(function (game) { sourceCounts.set(game.categoryKey, (sourceCounts.get(game.categoryKey) || 0) + 1); });
     discoverCatalog = catalog.filter(function (game) { return game.featured; }).concat(catalog.filter(function (game) { return !game.featured; }));
     favorites = new Set(Array.from(favorites).filter(function (id) { return gamesById.has(id); }));
     recent = recent.filter(function (id) { return gamesById.has(id); });
@@ -404,7 +463,7 @@
     register({
       name: "search_neo_games",
       title: "Search NEO Games",
-      description: "Search the visible Nextnode game catalogue by title or category.",
+      description: "Search the visible master game catalogue by title or source.",
       inputSchema: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 80 } }, required: ["query"], additionalProperties: false },
       annotations: { readOnlyHint: true, untrustedContentHint: false },
       execute: function (input) {
@@ -416,7 +475,7 @@
     register({
       name: "open_neo_game",
       title: "Open NEO Game",
-      description: "Open one game from the Nextnode catalogue through the NEO web proxy.",
+      description: "Open one game from the master catalogue through the NEO web proxy.",
       inputSchema: { type: "object", properties: { id: { type: "string", minLength: 1, maxLength: 160 } }, required: ["id"], additionalProperties: false },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: function (input) {
@@ -459,6 +518,10 @@
       clearTimeout(searchTimer);
       searchTimer = window.setTimeout(renderLibrary, 100);
     });
+    $("[data-sort]").addEventListener("change", function () {
+      sortMode = this.value || "title-asc";
+      renderLibrary();
+    });
     $("[data-more]").addEventListener("click", renderNext);
     if ("IntersectionObserver" in window) {
       loadObserver = new IntersectionObserver(function (entries) {
@@ -481,9 +544,9 @@
 
     loadCatalog().catch(function () {
       $("[data-count]").textContent = "CATALOGUE UNAVAILABLE";
-      $("[data-results]").textContent = "Nextnode connection failed";
+      $("[data-results]").textContent = "Master list connection failed";
       $("[data-state]").hidden = false;
-      $("[data-state]").textContent = "The Nextnode game catalogue could not load. Check the connection and try again.";
+      $("[data-state]").textContent = "The master game catalogue could not load. Check the connection and try again.";
     });
 
     window.NEO_GAMES = Object.freeze({

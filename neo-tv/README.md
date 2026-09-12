@@ -6,8 +6,9 @@ NEO Movies is the lightweight, original cinema interface built into NEO OS.
 - profile-specific My List and continue-watching progress
 - theme synchronization with NEO OS
 - lazy catalog rows and images
-- native video playback and a no-restart desktop pop-out
-- live discovery through public, CORS-enabled catalog APIs
+- embedded movie and series playback through VidFast
+- native playback for open films, with a no-restart desktop pop-out
+- a lazy-loaded movie and television library backed by public catalog metadata
 - session-local playback of videos uploaded by the user
 
-The included playable titles are openly licensed films. External discovery results link to their official page; no third-party credentials, proprietary catalogues, or private source code are bundled.
+Catalog titles use their public TMDB identifiers to launch the VidFast player inside NEO Movies. The bundled open films continue to use direct native video streams, and uploads stay local to the current browser session.

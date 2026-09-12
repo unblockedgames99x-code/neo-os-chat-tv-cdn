@@ -43,18 +43,15 @@ button { color: inherit; cursor: pointer; }
 .games-mark {
   width: 48px;
   height: 48px;
-  padding: 0;
+  padding: 6px;
   display: grid;
   place-items: center;
-  color: #fff;
-  background: var(--games-green);
-  border: 0;
-  border-radius: 50%;
+  background: var(--games-panel);
+  border: 1px solid var(--games-line);
+  border-radius: 14px;
   box-shadow: 0 9px 28px color-mix(in srgb, var(--games-green) 26%, transparent);
 }
-.games-mark svg, .hero-symbol svg { width: 100%; height: 100%; }
-.games-mark circle, .hero-symbol circle { fill: none; stroke: currentColor; stroke-width: 2.4; }
-.games-mark path, .hero-symbol path { fill: none; stroke: currentColor; stroke-width: 3.1; stroke-linecap: round; stroke-linejoin: round; }
+.games-mark img, .hero-symbol img { width: 100%; height: 100%; object-fit: contain; }
 .side-nav nav { width: 100%; margin-top: 32px; display: grid; gap: 5px; }
 .nav-button {
   position: relative;
@@ -102,10 +99,10 @@ main { min-height: 100vh; margin-left: 94px; }
 .hero-symbol {
   width: 62px;
   height: 62px;
-  padding: 7px;
-  color: #fff;
-  background: var(--games-green);
-  border-radius: 50%;
+  padding: 4px;
+  background: color-mix(in srgb, var(--games-panel) 82%, transparent);
+  border: 1px solid var(--games-line);
+  border-radius: 18px;
   box-shadow: 0 16px 44px color-mix(in srgb, var(--games-green) 24%, transparent);
 }
 .hero-heading { margin-top: 16px; }
@@ -130,10 +127,16 @@ main { min-height: 100vh; margin-left: 94px; }
   font-weight: 780;
   letter-spacing: .13em;
 }
+.catalog-tools {
+  width: min(900px, 100%);
+  margin-top: 28px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
 .search {
   width: min(760px, 100%);
   height: 58px;
-  margin-top: 28px;
   padding: 0 20px;
   display: flex;
   align-items: center;
@@ -160,6 +163,33 @@ main { min-height: 100vh; margin-left: 94px; }
   font-size: 17px;
 }
 .search input::placeholder { color: var(--games-muted); }
+.sort-control {
+  min-width: 176px;
+  height: 58px;
+  padding: 0 13px;
+  display: grid;
+  align-content: center;
+  gap: 1px;
+  color: var(--games-muted);
+  background: var(--games-panel);
+  border: 1px solid var(--games-line);
+  border-radius: 18px;
+  text-align: left;
+}
+.sort-control > span { font-size: 9px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+.sort-control select {
+  width: 100%;
+  padding: 0;
+  color: var(--games-text);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.sort-control option { color: var(--games-text); background: var(--games-panel); }
 .category-chips {
   width: 100%;
   margin-top: 24px;
@@ -359,6 +389,8 @@ main { min-height: 100vh; margin-left: 94px; }
   .nav-button.is-active::before { top: -4px; left: 50%; width: 25px; height: 3px; transform: translateX(-50%); }
   main { margin-left: 0; padding-bottom: 66px; }
   .catalog-hero { padding: 34px 14px 20px; }
+  .catalog-tools { flex-direction: column; }
+  .search, .sort-control { width: 100%; }
   .hero-symbol { width: 52px; height: 52px; }
   .search { height: 52px; margin-top: 22px; border-radius: 15px; }
   .category-chips { justify-content: flex-start; }

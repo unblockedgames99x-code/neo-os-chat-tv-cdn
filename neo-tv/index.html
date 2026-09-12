@@ -10,11 +10,11 @@
   <script src="../neo-app-theme.js?v=20260907-theme-system-v2"></script>
   <link rel="stylesheet" href="../neo-theme-system.css?v=20260907-theme-system-v2">
   <link rel="stylesheet" href="../neo-fonts.css?v=20260912-native-fast-v1">
-  <link rel="stylesheet" href="./app.css?v=20260912-full-catalog-v1">
+  <link rel="stylesheet" href="./app.css?v=20260912-vidfast-v1">
   <script src="../neo-link-proxy.js?v=20260912-sitewide-v2"></script>
   <script src="../neo-proxy-client.js?v=20260912-sitewide-v2"></script>
   <script defer src="./catalog.js?v=20260912-open-movies-v2"></script>
-  <script defer src="./app.js?v=20260912-full-catalog-v1"></script>
+  <script defer src="./app.js?v=20260912-vidfast-v1"></script>
 </head>
 <body>
   <div class="app-shell" data-app-shell hidden>
@@ -43,7 +43,7 @@
 
     <main class="content" data-content>
       <header class="topbar">
-        <div class="wordmark"><strong>NEO</strong><span>MOVIES</span></div>
+        <div class="wordmark"><img src="../assets/movies-icon.webp" alt=""><strong>NEO</strong><span>MOVIES</span></div>
         <div class="top-actions">
           <label class="search-box">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
@@ -103,7 +103,7 @@
       <span class="eyebrow">NEO MOVIES</span><h2>Playback & data</h2>
       <label class="check"><input type="checkbox" data-data-saver> Data saver (smaller images)</label>
       <label class="check"><input type="checkbox" data-autoplay-preview> Autoplay previews</label>
-      <p class="dialog-note">The Open films row contains openly released films. Catalogue titles link to their official metadata pages through the NEO web proxy. Your uploaded videos stay in this session.</p>
+      <p class="dialog-note">Movies and series play inside NEO Movies through VidFast. The Open films row uses direct open-media streams. Your uploaded videos stay in this session.</p>
       <div class="dialog-actions"><button value="cancel" class="primary">Done</button></div>
     </form>
   </dialog>
@@ -114,6 +114,7 @@
 
   <section class="player" data-player hidden aria-label="Video player">
     <video data-video controls playsinline preload="metadata"></video>
+    <iframe data-vidfast-player title="NEO Movies player" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen hidden></iframe>
     <div class="player-top"><strong data-player-title></strong><div><button type="button" data-fullscreen-player>Full screen</button><button type="button" data-pip>Pop out</button><button type="button" data-close-player>Close</button></div></div>
     <div class="popout-controls" data-popout-controls hidden><div class="popout-drag" data-popout-drag title="Drag video" aria-label="Drag popped-out video"><span></span></div><button type="button" data-restore-popout>Restore</button></div>
     <div class="player-status" data-player-status hidden role="status" aria-live="polite">

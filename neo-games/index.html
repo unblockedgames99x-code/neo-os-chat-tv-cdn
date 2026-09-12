@@ -5,24 +5,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#000000">
-  <meta name="description" content="NEO Games — the lightweight Nextnode game catalogue.">
+  <meta name="description" content="NEO Games — the complete Greatest Greatest master catalogue.">
   <title>NEO Games</title>
   <script src="../neo-app-theme.js?v=20260907-theme-system-v2"></script>
   <link rel="stylesheet" href="../neo-fonts.css?v=20260912-native-fast-v1">
-  <link rel="stylesheet" href="./app.css?v=20260911-nextnode-v1">
-  <script src="./config.js?v=20260911-nextnode-v1"></script>
+  <link rel="stylesheet" href="./app.css?v=20260912-master-list-v1">
+  <script src="./config.js?v=20260912-master-list-v1"></script>
   <script src="../neo-link-proxy.js?v=20260911-all-links-v1"></script>
   <script src="../neo-proxy-client.js?v=20260912-resource-proxy-v1"></script>
-  <script defer src="./app.js?v=20260912-nextnode-proxy-v1"></script>
+  <script defer src="./app.js?v=20260912-master-list-v1"></script>
 </head>
 <body>
   <aside class="side-nav" aria-label="Games navigation">
     <button class="games-mark" type="button" data-mode="home" aria-label="Games home">
-      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-        <circle cx="24" cy="24" r="21"></circle>
-        <path d="M13 13c4.8.5 8.4 3.1 11 7.1 2.6-4 6.2-6.6 11-7.1"></path>
-        <path d="M12.6 35.2C15.4 27.9 19 23 24 20.1c5 2.9 8.6 7.8 11.4 15.1"></path>
-      </svg>
+      <img src="../assets/xbox-games.svg?v=20260912-official-shape-v2" alt="">
     </button>
     <nav>
       <button class="nav-button is-active" type="button" data-mode="home"><span class="nav-icon" aria-hidden="true">⌂</span><span>Discover</span></button>
@@ -35,22 +31,29 @@
   <main data-main>
     <header class="catalog-hero">
       <div class="hero-symbol" aria-hidden="true">
-        <svg viewBox="0 0 48 48" focusable="false">
-          <circle cx="24" cy="24" r="21"></circle>
-          <path d="M13 13c4.8.5 8.4 3.1 11 7.1 2.6-4 6.2-6.6 11-7.1"></path>
-          <path d="M12.6 35.2C15.4 27.9 19 23 24 20.1c5 2.9 8.6 7.8 11.4 15.1"></path>
-        </svg>
+        <img src="../assets/xbox-games.svg?v=20260912-official-shape-v2" alt="">
       </div>
       <div class="hero-heading">
         <p class="eyebrow">PLAY IN NEO OS</p>
         <h1>Games</h1>
-        <p class="catalog-count" data-count aria-live="polite">LOADING 1,372 GAMES</p>
+        <p class="catalog-count" data-count aria-live="polite">LOADING THE FULL CATALOGUE</p>
       </div>
-      <label class="search">
-        <span aria-hidden="true">⌕</span>
-        <input type="search" data-search aria-label="Search games" autocomplete="off" spellcheck="false" placeholder="Search games…">
-      </label>
-      <div class="category-chips" data-category-chips aria-label="Game categories"></div>
+      <div class="catalog-tools">
+        <label class="search">
+          <span aria-hidden="true">⌕</span>
+          <input type="search" data-search aria-label="Search games" autocomplete="off" spellcheck="false" placeholder="Search games or sources…">
+        </label>
+        <label class="sort-control">
+          <span>Sort</span>
+          <select data-sort aria-label="Sort games">
+            <option value="title-asc">Title: A–Z</option>
+            <option value="title-desc">Title: Z–A</option>
+            <option value="source-size">Largest source</option>
+            <option value="source-asc">Source: A–Z</option>
+          </select>
+        </label>
+      </div>
+      <div class="category-chips" data-category-chips aria-label="Game sources"></div>
     </header>
 
     <section class="library" data-library aria-live="polite">
@@ -59,10 +62,10 @@
           <span class="eyebrow" data-library-label>FEATURED</span>
           <h2 data-library-title>Featured games</h2>
         </div>
-        <p data-results>Loading the Nextnode catalogue…</p>
+        <p data-results>Loading the game catalogue…</p>
       </header>
       <div class="game-grid" data-grid></div>
-      <div class="library-state" data-state>Loading the complete catalogue…</div>
+      <div class="library-state" data-state>Loading the complete master list…</div>
       <button class="load-more" type="button" data-more hidden>Load more</button>
       <div class="load-sentinel" data-sentinel aria-hidden="true"></div>
     </section>

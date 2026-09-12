@@ -19,6 +19,7 @@
   var activeMediaSources = [];
   var activeMediaIndex = 0;
   var activeResumeAt = 0;
+  var activePlayerMode = "";
   var playerLoadId = 0;
   var uploadedTitles = [];
   var shellPopoutActive = false;
@@ -39,6 +40,18 @@
 
   function $(selector, root) { return (root || document).querySelector(selector); }
   function $$(selector, root) { return Array.from((root || document).querySelectorAll(selector)); }
+  function ensureVideo() {
+    var video = $("[data-video]");
+    if (video) return video;
+    video = document.createElement("video");
+    video.dataset.video = "";
+    video.controls = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    var frame = $("[data-vidfast-player]");
+    $("[data-player]").insertBefore(video, frame || $("[data-player]").firstChild);
+    return video;
+  }
   function read(key, fallback) {
     try {
       var value = JSON.parse(localStorage.getItem(key) || "null");
@@ -380,6 +393,23 @@
       return /^(?:https:\/\/|blob:)/i.test(String(source || "")) && candidates.indexOf(source) === index;
     });
   }
+  function isVidFastTitle(title) {
+    return Boolean(title && title.providerId && (title.type === "movie" || title.type === "series"));
+  }
+  function canPlayTitle(title) {
+    return streamSources(title).length > 0 || isVidFastTitle(title);
+  }
+  function vidFastUrl(title, resumeAt) {
+    var id = encodeURIComponent(String(title.providerId || ""));
+    var path = title.type === "series" ? "/tv/" + id + "/" + Math.max(1, Number(title.season) || 1) + "/" + Math.max(1, Number(title.episode) || 1) : "/movie/" + id;
+    var query = new URLSearchParams({ autoPlay: "true", title: "true", poster: "true", theme: "E50914", fullscreenButton: "true" });
+    if (resumeAt > 0) query.set("startAt", String(Math.floor(resumeAt)));
+    if (title.type === "series") {
+      query.set("nextButton", "true");
+      query.set("autoNext", "true");
+    }
+    return "https://vidfast.vc" + path + "?" + query.toString();
+  }
   function setHero(title) {
     if (!title) return;
     activeTitle = title;
@@ -387,7 +417,7 @@
     $("[data-hero-meta]").textContent = meta(title);
     $("[data-hero-description]").textContent = title.description || "A new story is waiting.";
     var heroAction = $("[data-hero-action]");
-    if (heroAction) heroAction.textContent = title.type === "manga" ? "Read" : (title.media ? "Play" : "More info");
+    if (heroAction) heroAction.textContent = title.type === "manga" ? "Read" : (canPlayTitle(title) ? "Play" : "More info");
     var image = $("[data-hero-image]");
     image.style.opacity = "0";
     var requestId = ++heroImageRequest;
@@ -494,7 +524,7 @@
     try {
       var request = section._neoCatalogRequest;
       var payload = await fetchCatalogPage(request.path, Object.assign({ page: 1, limit: catalogPageSize }, request.params));
-      renderCards(track, payload.items, true);
+      renderCards(track, payload.items, false);
       if (!payload.items.length) throw new Error("Catalog is empty");
     } catch (error) {
       track.innerHTML = '<p class="rail-error">This row is temporarily unavailable.</p>';
@@ -634,8 +664,8 @@
     var metaLine = document.createElement("p"); metaLine.className = "details-meta"; metaLine.textContent = meta(title);
     var description = document.createElement("p"); description.className = "details-description"; description.textContent = title.description || "Discover this title.";
     var actions = document.createElement("div"); actions.className = "details-actions";
-    var play = document.createElement("button"); play.type = "button"; play.className = "primary"; play.textContent = title.type === "manga" ? "Read" : (title.media ? "Play" : "Open official page");
-    play.addEventListener("click", function () { title.type === "manga" ? openReader(title) : (title.media ? playTitle(title) : openOfficial(title)); });
+    var play = document.createElement("button"); play.type = "button"; play.className = "primary"; play.textContent = title.type === "manga" ? "Read" : (canPlayTitle(title) ? (title.type === "series" ? "Play S1 E1" : "Play") : "Open official page");
+    play.addEventListener("click", function () { title.type === "manga" ? openReader(title) : (canPlayTitle(title) ? playTitle(title) : openOfficial(title)); });
     var listButton = document.createElement("button"); listButton.type = "button"; listButton.className = "secondary"; listButton.textContent = inList ? "✓ In My List" : "+ My List";
     listButton.addEventListener("click", function () {
       var current = currentData();
@@ -706,7 +736,7 @@
     $("[data-player-official]").hidden = !failed || !activeTitle || !activeTitle.officialUrl;
   }
   function startPlayerSource(index, resumeAt) {
-    var video = $("[data-video]");
+    var video = ensureVideo();
     if (!activeMediaSources[index]) return;
     activeMediaIndex = index;
     activeResumeAt = Math.max(0, Number(resumeAt) || 0);
@@ -748,7 +778,7 @@
   }
   function playTitle(title) {
     var sources = streamSources(title);
-    if (!title || !sources.length) return openOfficial(title || {});
+    if (!title || (!sources.length && !isVidFastTitle(title))) return openOfficial(title || {});
     if ($("[data-details-dialog]").open) $("[data-details-dialog]").close();
     activeTitle = title;
     activeMediaSources = sources;
@@ -756,7 +786,24 @@
     $("[data-player-title]").textContent = title.title;
     $("[data-player]").hidden = false;
     var progress = currentData().progress[title.id];
-    startPlayerSource(0, progress ? progress.time : 0);
+    var resumeAt = progress ? progress.time : 0;
+    var video = ensureVideo();
+    var frame = $("[data-vidfast-player]");
+    if (isVidFastTitle(title) && !sources.length) {
+      activePlayerMode = "vidfast";
+      video.pause();
+      video.removeAttribute("src");
+      video.hidden = true;
+      frame.hidden = false;
+      frame.src = vidFastUrl(title, resumeAt);
+      setPlayerMessage("", false);
+    } else {
+      activePlayerMode = "video";
+      frame.hidden = true;
+      frame.src = "about:blank";
+      video.hidden = false;
+      startPlayerSource(0, resumeAt);
+    }
   }
   function persistProgress(force) {
     var video = $("[data-video]");
@@ -767,7 +814,8 @@
     saveCurrentData(data);
   }
   function closePlayer() {
-    var video = $("[data-video]");
+    var video = ensureVideo();
+    var frame = $("[data-vidfast-player]");
     setShellPopout(false);
     persistProgress(true);
     activeMediaSources = [];
@@ -777,6 +825,10 @@
     video.pause();
     video.removeAttribute("src");
     video.load();
+    video.hidden = false;
+    frame.hidden = true;
+    frame.src = "about:blank";
+    activePlayerMode = "";
     setPlayerMessage("", false);
     $("[data-player]").hidden = true;
   }
@@ -987,6 +1039,7 @@
   }
 
   function init() {
+    ensureVideo();
     renderProfileGate(false);
     $("[data-manage-profiles]").addEventListener("click", function () { renderProfileGate(this.dataset.managing !== "true"); });
     $("[data-profile-save]").addEventListener("click", saveProfile);
@@ -1072,7 +1125,17 @@
       if (!$("[data-reader]").hidden) closeReader();
       else if (!$("[data-player]").hidden) closePlayer();
     });
-    document.addEventListener("visibilitychange", function () { if (document.hidden && !shellPopoutActive && !$("[data-player]").hidden) $("[data-video]").pause(); });
+    window.addEventListener("message", function (event) {
+      if (event.origin !== "https://vidfast.vc" || activePlayerMode !== "vidfast" || !activeTitle) return;
+      var payload = event.data && event.data.type === "PLAYER_EVENT" ? event.data.data : null;
+      if (!payload || !Number.isFinite(Number(payload.currentTime)) || !Number.isFinite(Number(payload.duration))) return;
+      if (payload.event === "timeupdate" && performance.now() - saveProgressAt < 3500) return;
+      saveProgressAt = performance.now();
+      var data = currentData();
+      data.progress[activeTitle.id] = { time: Math.round(Number(payload.currentTime)), duration: Math.round(Number(payload.duration)), updated: Date.now() };
+      saveCurrentData(data);
+    });
+    document.addEventListener("visibilitychange", function () { if (document.hidden && !shellPopoutActive && activePlayerMode === "video" && !$("[data-player]").hidden) $("[data-video]").pause(); });
     var id = "";
     try { id = sessionStorage.getItem(sessionKey) || ""; } catch (error) {}
     var selected = profiles().find(function (profile) { return profile.id === id; });
