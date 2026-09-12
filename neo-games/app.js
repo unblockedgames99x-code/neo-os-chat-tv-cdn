@@ -419,9 +419,15 @@
       var controller = new AbortController();
       var timer = window.setTimeout(function () { controller.abort(); }, 15000);
       try {
-        var response = await (window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.fetch === "function"
-          ? window.NEO_PROXY_CLIENT.fetch(CATALOG_URLS[index], { cache: "force-cache", signal: controller.signal })
-          : fetch(CATALOG_URLS[index], { credentials: "omit", cache: "force-cache", mode: "cors", signal: controller.signal }));
+        // This is a trusted, read-only data file rather than a playable URL.
+        // Loading it directly avoids booting the full browsing transport before
+        // the catalogue can render; covers and every game launch stay proxied.
+        var response = await fetch(CATALOG_URLS[index], {
+          credentials: "omit",
+          cache: "force-cache",
+          mode: "cors",
+          signal: controller.signal
+        });
         if (!response.ok) throw new Error("Catalogue returned " + response.status);
         return parseCatalogScript(await response.text());
       } catch (error) {
