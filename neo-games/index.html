@@ -13,7 +13,7 @@
   <script src="./config.js?v=20260912-master-list-v1"></script>
   <script src="../neo-link-proxy.js?v=20260911-all-links-v1"></script>
   <script src="../neo-proxy-client.js?v=20260912-resource-proxy-v1"></script>
-  <script defer src="./app.js?v=20260912-scrollable-sources-v1"></script>
+  <script defer src="./app.js?v=20260912-scrollable-sources-v1&amp;taskbar=game-shortcut-v1"></script>
 </head>
 <body>
   <aside class="side-nav" aria-label="Games navigation">
@@ -73,7 +73,7 @@
   <section class="player" data-player hidden>
     <header>
       <div><span class="player-dot"></span><strong data-player-title>Game</strong></div>
-      <div><button type="button" data-player-fullscreen>Fullscreen</button><button type="button" data-player-open>Open in Browser</button><button type="button" data-player-close>Close</button></div>
+      <div><button type="button" data-player-fullscreen>Fullscreen</button><button type="button" data-player-pin title="Also adds this game to the home screen">Add to taskbar</button><button type="button" data-player-close>Close</button></div>
     </header>
     <div class="frame-wrap">
       <iframe data-game-frame title="Game" src="about:blank" allow="autoplay; fullscreen; gamepad; clipboard-read; clipboard-write" allowfullscreen></iframe>

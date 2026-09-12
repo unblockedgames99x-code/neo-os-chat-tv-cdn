@@ -384,6 +384,7 @@ main { min-height: 100vh; margin-left: 94px; }
   font-size: 11px;
   font-weight: 700;
 }
+.player header button:disabled { opacity: .72; cursor: default; }
 .frame-wrap { position: absolute; inset: 58px 0 0; }
 .frame-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; background: var(--games-bg); border: 0; }
 .frame-status {

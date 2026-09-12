@@ -23,6 +23,8 @@
   var visible = 0;
   var activeGame = null;
   var frameTimer = 0;
+  var shortcutTimer = 0;
+  var shortcutRequestId = "";
   var loadObserver = null;
 
   function $(selector, root) { return (root || document).querySelector(selector); }
@@ -459,6 +461,10 @@
     var frame = $("[data-game-frame]");
     resetProxyFrame(frame);
     $("[data-player-title]").textContent = game.name;
+    var shortcutButton = $("[data-player-pin]");
+    shortcutButton.disabled = false;
+    shortcutButton.textContent = "Add to taskbar";
+    shortcutButton.title = "Also adds this game to the home screen";
     $("[data-player]").hidden = false;
     showFrameMessage("Loading " + game.name + " through the NEO web proxy…", false);
     if (!requestProxiedEmbed(frame, game.url)) {
@@ -478,17 +484,54 @@
   function closeGame() {
     var frame = $("[data-game-frame]");
     resetProxyFrame(frame);
+    clearTimeout(shortcutTimer);
+    shortcutRequestId = "";
     activeGame = null;
     $("[data-player]").hidden = true;
   }
 
-  function openInBrowser() {
+  function addActiveGameToTaskbar() {
     if (!activeGame) return;
-    if (!isEmbedded() || window.__NEOLinkProxyInstalled !== true) {
-      showFrameMessage("Open Games inside NEO OS to use the web proxy.", true);
+    var button = $("[data-player-pin]");
+    if (!isEmbedded()) {
+      button.textContent = "Add to taskbar";
+      button.title = "Open Games inside NEO OS to add this shortcut";
       return;
     }
-    window.open(activeGame.url, "_blank", "noopener,noreferrer");
+    clearTimeout(shortcutTimer);
+    shortcutRequestId = "game-shortcut-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    button.disabled = true;
+    button.textContent = "Adding…";
+    window.parent.postMessage({
+      type: "neo-shell:add-game-shortcut",
+      id: shortcutRequestId,
+      game: { title: activeGame.name, url: activeGame.url, icon: activeGame.img }
+    }, "*");
+    shortcutTimer = window.setTimeout(function () {
+      if (!shortcutRequestId) return;
+      shortcutRequestId = "";
+      button.disabled = false;
+      button.textContent = "Try again";
+      button.title = "NEO OS did not answer. Select to retry.";
+    }, 8000);
+  }
+
+  function handleShellShortcutResult(event) {
+    if (event.source !== window.parent) return;
+    var data = event.data;
+    if (!data || data.type !== "neo-shell:add-game-shortcut-result" || data.id !== shortcutRequestId) return;
+    clearTimeout(shortcutTimer);
+    shortcutRequestId = "";
+    var button = $("[data-player-pin]");
+    if (data.ok) {
+      button.disabled = true;
+      button.textContent = "Added";
+      button.title = "Added to the taskbar and home screen";
+      return;
+    }
+    button.disabled = false;
+    button.textContent = "Try again";
+    button.title = String(data.error || "This game could not be added.");
   }
 
   function observeFrameState() {
@@ -643,7 +686,7 @@
     }
 
     $("[data-player-close]").addEventListener("click", closeGame);
-    $("[data-player-open]").addEventListener("click", openInBrowser);
+    $("[data-player-pin]").addEventListener("click", addActiveGameToTaskbar);
     $("[data-player-fullscreen]").addEventListener("click", function () {
       var player = $("[data-player]");
       if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
@@ -652,6 +695,7 @@
     window.addEventListener("keydown", function (event) {
       if (event.key === "Escape" && !$("[data-player]").hidden && !document.fullscreenElement) closeGame();
     });
+    window.addEventListener("message", handleShellShortcutResult);
     observeFrameState();
 
     loadCatalog().catch(function () {
