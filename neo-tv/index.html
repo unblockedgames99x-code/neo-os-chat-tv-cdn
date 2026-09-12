@@ -10,11 +10,13 @@
   <script src="../neo-app-theme.js?v=20260907-theme-system-v2"></script>
   <link rel="stylesheet" href="../neo-theme-system.css?v=20260907-theme-system-v2">
   <link rel="stylesheet" href="../neo-fonts.css?v=20260912-native-fast-v1">
-  <link rel="stylesheet" href="./app.css?v=20260912-vidfast-v1">
+  <link rel="stylesheet" href="./app.css?v=20260912-episodes-v8">
   <script src="../neo-link-proxy.js?v=20260912-sitewide-v2"></script>
   <script src="../neo-proxy-client.js?v=20260912-sitewide-v2"></script>
   <script defer src="./catalog.js?v=20260912-open-movies-v2"></script>
-  <script defer src="./app.js?v=20260912-vidfast-v1"></script>
+  <script defer src="./offline-catalog.js?v=20260912-library-v1"></script>
+  <script defer src="./offline-series.js?v=20260912-series-v1"></script>
+  <script defer src="./app.js?v=20260912-episodes-v8"></script>
 </head>
 <body>
   <div class="app-shell" data-app-shell hidden>
@@ -114,7 +116,7 @@
   <section class="player" data-player hidden aria-label="Video player">
     <video data-video controls playsinline preload="metadata"></video>
     <iframe data-vidfast-player title="NEO Movies player" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen hidden></iframe>
-    <div class="player-top"><strong data-player-title></strong><div><button type="button" data-fullscreen-player>Full screen</button><button type="button" data-pip>Pop out</button><button type="button" data-close-player>Close</button></div></div>
+    <div class="player-top"><strong data-player-title></strong><div class="player-actions"><label class="player-source">Source<select data-player-source><option value="vidcore">Auto</option><option value="vidlink">Backup</option><option value="vidfast">VidFast</option></select></label><button type="button" data-fullscreen-player>Full screen</button><button type="button" data-pip>Pop out</button><button type="button" data-close-player>Close</button></div></div>
     <div class="popout-controls" data-popout-controls hidden><div class="popout-drag" data-popout-drag title="Drag video" aria-label="Drag popped-out video"><span></span></div><button type="button" data-restore-popout>Restore</button></div>
     <div class="player-status" data-player-status hidden role="status" aria-live="polite">
       <p data-player-message></p>

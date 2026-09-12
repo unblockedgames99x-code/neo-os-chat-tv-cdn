@@ -20,11 +20,15 @@
   var activeMediaIndex = 0;
   var activeResumeAt = 0;
   var activePlayerMode = "";
+  var activePlayerProvider = "vidcore";
   var playerLoadId = 0;
   var uploadedTitles = [];
   var shellPopoutActive = false;
   var catalogApi = "https://vrcwat.ch/web/catalog";
   var catalogPageSize = 36;
+  var offlineCatalog = window.NEO_MOVIES_OFFLINE_CATALOG || {};
+  var offlineSeries = window.NEO_MOVIES_OFFLINE_SERIES || {};
+  var seriesSeasonCache = Object.create(null);
   var catalogIndex = Object.create(null);
   var libraryState = null;
   var searchState = null;
@@ -143,6 +147,55 @@
       return title;
     });
   }
+  function offlineCatalogPage(path, params) {
+    params = params || {};
+    var type = String(params.type || "m");
+    var sort = String(params.sort || "popular");
+    var genre = String(params.genre || "");
+    var page = Math.max(1, Number(params.page) || 1);
+    var limit = Math.max(1, Number(params.limit) || catalogPageSize);
+    var rows = [];
+    var seen = Object.create(null);
+    var exact = path === "search" || path === "top" ? null : (offlineCatalog[[type, sort, genre].join("|")] || offlineCatalog[[type, sort, ""].join("|")]);
+    var sources;
+    if (path === "top") {
+      var ratedMovies = offlineCatalog["m|rating|"] || [];
+      var popularSeries = offlineCatalog["tv|popular|"] || [];
+      var trendingMix = [];
+      for (var trendIndex = 0; trendIndex < Math.max(ratedMovies.length, popularSeries.length); trendIndex += 1) {
+        if (ratedMovies[trendIndex]) trendingMix.push(ratedMovies[trendIndex]);
+        if (popularSeries[trendIndex]) trendingMix.push(popularSeries[trendIndex]);
+      }
+      sources = [trendingMix];
+    } else {
+      sources = exact ? [exact] : Object.keys(offlineCatalog).map(function (key) { return offlineCatalog[key]; });
+    }
+    sources.forEach(function (items) {
+      (Array.isArray(items) ? items : []).forEach(function (tuple) {
+        var key = String(tuple[0]) + ":" + String(tuple[1]);
+        if (seen[key]) return;
+        if (type !== "all" && tuple[0] !== type) return;
+        seen[key] = true;
+        rows.push(tuple);
+      });
+    });
+    if (path === "search") {
+      var query = clean(params.q).toLowerCase();
+      rows = rows.filter(function (tuple) { return String(tuple[2] || "").toLowerCase().indexOf(query) !== -1; });
+    }
+    var start = (page - 1) * limit;
+    var slice = rows.slice(start, start + limit);
+    return {
+      page: page,
+      hasMore: start + limit < rows.length,
+      items: rememberTitles(slice.map(function (tuple) {
+        return catalogTitle({
+          type: tuple[0], id: tuple[1], title: tuple[2], year: tuple[3], rating: tuple[4],
+          posterUrl: tuple[5], backdropUrl: tuple[6]
+        }, params.label || "");
+      }))
+    };
+  }
   function fetchCatalogPage(path, params, signal) {
     return proxyFetch(catalogUrl(path, params), { cache: "force-cache", signal: signal }).then(function (response) {
       if (!response.ok) throw new Error("Catalog unavailable");
@@ -155,6 +208,58 @@
         hasMore: Boolean(payload && payload.hasMore),
         items: rememberTitles(results.map(function (item) { return catalogTitle(item, genre); }))
       };
+    }).catch(function () {
+      return offlineCatalogPage(path, params);
+    });
+  }
+  function normalizeSeasons(items) {
+    return (Array.isArray(items) ? items : []).map(function (season) {
+      if (Array.isArray(season)) return { number: Number(season[0]), episodes: Number(season[1]), name: clean(season[2]) || "Season " + season[0] };
+      return {
+        number: Number(season && (season.seasonNumber != null ? season.seasonNumber : season.number)),
+        episodes: Number(season && (season.episodeCount != null ? season.episodeCount : season.episodes)),
+        name: clean(season && (season.seasonName || season.name))
+      };
+    }).filter(function (season) { return season.number > 0 && season.episodes > 0; }).sort(function (a, b) { return a.number - b.number; });
+  }
+  function tvMazeSeasons(title) {
+    var url = "https://api.tvmaze.com/singlesearch/shows?q=" + encodeURIComponent(title.title) + "&embed=episodes";
+    return fetch(url, { cache: "force-cache", credentials: "omit" }).then(function (response) {
+      if (!response.ok) throw new Error("Series metadata unavailable");
+      return response.json();
+    }).then(function (payload) {
+      var counts = Object.create(null);
+      var episodes = payload && payload._embedded && payload._embedded.episodes;
+      (Array.isArray(episodes) ? episodes : []).forEach(function (episode) {
+        var season = Number(episode && episode.season);
+        if (season > 0) counts[season] = (counts[season] || 0) + 1;
+      });
+      return Object.keys(counts).map(function (season) { return { number: Number(season), episodes: counts[season], name: "Season " + season }; });
+    });
+  }
+  function loadSeriesSeasons(title) {
+    var providerId = String(title && title.providerId || "");
+    if (seriesSeasonCache[providerId]) return Promise.resolve(seriesSeasonCache[providerId]);
+    var bundled = normalizeSeasons(offlineSeries[providerId]);
+    if (bundled.length) {
+      seriesSeasonCache[providerId] = bundled;
+      return Promise.resolve(bundled);
+    }
+    return proxyFetch(catalogUrl("details", { type: "tv", id: providerId }), { cache: "force-cache" }).then(function (response) {
+      if (!response.ok) throw new Error("Series metadata unavailable");
+      return response.json();
+    }).then(function (payload) {
+      var seasons = normalizeSeasons(payload && payload.seasons);
+      if (!seasons.length) throw new Error("No seasons returned");
+      seriesSeasonCache[providerId] = seasons;
+      return seasons;
+    }).catch(function () {
+      return tvMazeSeasons(title).then(function (seasons) {
+        seasons = normalizeSeasons(seasons);
+        if (!seasons.length) throw new Error("No seasons found");
+        seriesSeasonCache[providerId] = seasons;
+        return seasons;
+      });
     });
   }
   function profileAvatar(profile) {
@@ -423,6 +528,33 @@
     }
     return "https://vidfast.vc" + path + "?" + query.toString();
   }
+  function embeddedPlayerUrl(title, resumeAt, provider) {
+    if (provider === "vidfast") return vidFastUrl(title, resumeAt);
+    var id = encodeURIComponent(String(title.providerId || ""));
+    var season = Math.max(1, Number(title.season) || 1);
+    var episode = Math.max(1, Number(title.episode) || 1);
+    if (provider === "vidlink") {
+      return "https://vidlink.pro/" + (title.type === "series" ? "tv/" + id + "/" + season + "/" + episode : "movie/" + id) + "?autoplay=true";
+    }
+    var path = title.type === "series" ? "/embed/tv/" + id + "/" + season + "/" + episode : "/embed/movie/" + id;
+    var query = new URLSearchParams({ autoplay: "true", theme: "e50914" });
+    if (resumeAt > 0) query.set("startAt", String(Math.floor(resumeAt)));
+    return "https://vidcore.org" + path + "?" + query.toString();
+  }
+  function loadEmbeddedPlayer(provider) {
+    if (!activeTitle || activePlayerMode !== "embedded") return;
+    var selected = provider || "vidcore";
+    activePlayerProvider = selected;
+    var chooser = $("[data-player-source]");
+    if (chooser) chooser.value = selected;
+    var progress = currentData().progress[activeTitle.id];
+    var resumeAt = progress ? progress.time : 0;
+    var frame = $("[data-vidfast-player]");
+    frame.src = "about:blank";
+    window.setTimeout(function () {
+      if (activePlayerMode === "embedded" && activeTitle) frame.src = embeddedPlayerUrl(activeTitle, resumeAt, selected);
+    }, 20);
+  }
   function setHero(title) {
     if (!title) return;
     activeTitle = title;
@@ -676,10 +808,95 @@
     var heading = document.createElement("h2"); heading.textContent = title.title;
     var metaLine = document.createElement("p"); metaLine.className = "details-meta"; metaLine.textContent = meta(title);
     var description = document.createElement("p"); description.className = "details-description"; description.textContent = title.description || "Discover this title.";
+    var episodePicker = null;
+    var seasonSelect = null;
+    var episodeSelect = null;
+    if (title.type === "series" && isVidFastTitle(title)) {
+      episodePicker = document.createElement("div");
+      episodePicker.className = "episode-picker";
+      seasonSelect = document.createElement("select");
+      episodeSelect = document.createElement("select");
+      seasonSelect.setAttribute("aria-label", "Season");
+      episodeSelect.setAttribute("aria-label", "Episode");
+      var loadingSeason = document.createElement("option");
+      loadingSeason.textContent = "Loading seasons…";
+      var loadingEpisode = document.createElement("option");
+      loadingEpisode.textContent = "Loading episodes…";
+      seasonSelect.appendChild(loadingSeason);
+      episodeSelect.appendChild(loadingEpisode);
+      seasonSelect.disabled = true;
+      episodeSelect.disabled = true;
+      var seasonLabel = document.createElement("label");
+      var episodeLabel = document.createElement("label");
+      seasonLabel.append("Season", seasonSelect);
+      episodeLabel.append("Episode", episodeSelect);
+      episodePicker.append(seasonLabel, episodeLabel);
+    }
     var actions = document.createElement("div"); actions.className = "details-actions";
     var play = document.createElement("button"); play.type = "button"; play.className = "primary"; play.textContent = title.type === "manga" ? "Read" : (canPlayTitle(title) ? (title.type === "series" ? "Play S1 E1" : "Play") : "Open official page");
-    play.addEventListener("click", function () { title.type === "manga" ? openReader(title) : (canPlayTitle(title) ? playTitle(title) : openOfficial(title)); });
-    var listButton = document.createElement("button"); listButton.type = "button"; listButton.className = "secondary"; listButton.textContent = inList ? "✓ In My List" : "+ My List";
+    function updateEpisodeButton() {
+      if (seasonSelect && episodeSelect) play.textContent = "Play S" + seasonSelect.value + " E" + episodeSelect.value;
+    }
+    if (seasonSelect && episodeSelect) {
+      var loadedSeasons = [];
+      function fillEpisodes() {
+        var selectedSeason = loadedSeasons.find(function (season) { return season.number === Number(seasonSelect.value); });
+        var count = selectedSeason ? selectedSeason.episodes : 1;
+        var preferredEpisode = Math.min(count, Math.max(1, Number(title.episode) || 1));
+        episodeSelect.replaceChildren();
+        for (var episodeNumber = 1; episodeNumber <= count; episodeNumber += 1) {
+          var episodeOption = document.createElement("option");
+          episodeOption.value = String(episodeNumber);
+          episodeOption.textContent = "Episode " + episodeNumber;
+          episodeSelect.appendChild(episodeOption);
+        }
+        episodeSelect.value = String(preferredEpisode);
+        updateEpisodeButton();
+      }
+      seasonSelect.addEventListener("change", fillEpisodes);
+      episodeSelect.addEventListener("change", updateEpisodeButton);
+      loadSeriesSeasons(title).then(function (seasons) {
+        if (!card.contains(seasonSelect)) return;
+        loadedSeasons = seasons;
+        seasonSelect.replaceChildren();
+        seasons.forEach(function (season) {
+          var seasonOption = document.createElement("option");
+          seasonOption.value = String(season.number);
+          seasonOption.textContent = season.name || "Season " + season.number;
+          seasonSelect.appendChild(seasonOption);
+        });
+        var preferredSeason = Math.max(1, Number(title.season) || seasons[0].number);
+        if (!seasons.some(function (season) { return season.number === preferredSeason; })) preferredSeason = seasons[0].number;
+        seasonSelect.value = String(preferredSeason);
+        seasonSelect.disabled = false;
+        episodeSelect.disabled = false;
+        fillEpisodes();
+      }).catch(function () {
+        if (!card.contains(seasonSelect)) return;
+        seasonSelect.replaceChildren(new Option("Season unavailable", "1"));
+        episodeSelect.replaceChildren(new Option("Episode unavailable", "1"));
+      });
+    }
+    play.addEventListener("click", function () {
+      if (title.type === "manga") return openReader(title);
+      if (!canPlayTitle(title)) return openOfficial(title);
+      if (seasonSelect && episodeSelect) {
+        var selectedTitle = Object.assign({}, title, {
+          id: title.id + "-s" + seasonSelect.value + "e" + episodeSelect.value,
+          season: Number(seasonSelect.value),
+          episode: Number(episodeSelect.value),
+          title: title.title + " · S" + seasonSelect.value + " E" + episodeSelect.value
+        });
+        return playTitle(selectedTitle);
+      }
+      playTitle(title);
+    });
+    var listButton = document.createElement("button");
+    listButton.type = "button";
+    listButton.className = "secondary my-list" + (inList ? " is-active" : "");
+    listButton.textContent = inList ? "✓" : "+";
+    listButton.title = inList ? "Remove from My List" : "Add to My List";
+    listButton.setAttribute("aria-label", listButton.title);
     listButton.addEventListener("click", function () {
       var current = currentData();
       var at = current.list.indexOf(title.id);
@@ -689,7 +906,9 @@
       renderView("list");
     });
     actions.append(play, listButton);
-    body.append(tag, heading, metaLine, description, actions);
+    body.append(tag, heading, metaLine, description);
+    if (episodePicker) body.appendChild(episodePicker);
+    body.appendChild(actions);
     card.append(backdrop, close, body);
     $("[data-details-dialog]").showModal();
   }
@@ -803,12 +1022,13 @@
     var video = ensureVideo();
     var frame = $("[data-vidfast-player]");
     if (isVidFastTitle(title) && !sources.length) {
-      activePlayerMode = "vidfast";
+      activePlayerMode = "embedded";
       video.pause();
       video.removeAttribute("src");
       video.hidden = true;
       frame.hidden = false;
-      frame.src = vidFastUrl(title, resumeAt);
+      activePlayerProvider = "vidcore";
+      loadEmbeddedPlayer(activePlayerProvider);
       setPlayerMessage("", false);
     } else {
       activePlayerMode = "video";
@@ -842,6 +1062,7 @@
     frame.hidden = true;
     frame.src = "about:blank";
     activePlayerMode = "";
+    activePlayerProvider = "vidcore";
     setPlayerMessage("", false);
     $("[data-player]").hidden = true;
   }
@@ -1088,6 +1309,7 @@
     });
     $("[data-search-more]").addEventListener("click", loadNextSearchPage);
     $("[data-close-player]").addEventListener("click", closePlayer);
+    $("[data-player-source]").addEventListener("change", function (event) { loadEmbeddedPlayer(event.target.value); });
     $("[data-video-upload]").addEventListener("click", function () { $("[data-video-file]").click(); });
     $("[data-video-file]").addEventListener("change", function () {
       addVideoUpload(this.files && this.files[0]);
@@ -1139,7 +1361,7 @@
       else if (!$("[data-player]").hidden) closePlayer();
     });
     window.addEventListener("message", function (event) {
-      if (event.origin !== "https://vidfast.vc" || activePlayerMode !== "vidfast" || !activeTitle) return;
+      if (event.origin !== "https://vidfast.vc" || activePlayerMode !== "embedded" || activePlayerProvider !== "vidfast" || !activeTitle) return;
       var payload = event.data && event.data.type === "PLAYER_EVENT" ? event.data.data : null;
       if (!payload || !Number.isFinite(Number(payload.currentTime)) || !Number.isFinite(Number(payload.duration))) return;
       if (payload.event === "timeupdate" && performance.now() - saveProgressAt < 3500) return;
