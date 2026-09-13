@@ -2,10 +2,10 @@
   "use strict";
 
   var config = window.NEO_GAMES_CONFIG || {};
-  var CATALOG_URL = "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/scrapegames.js";
+  var CATALOG_URL = "https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/index.json";
   var CATALOG_URLS = [config.catalog || CATALOG_URL].concat(Array.isArray(config.catalogFallbacks) ? config.catalogFallbacks : []).filter(Boolean);
-  var ASSET_BASE = config.assetBase || "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/";
-  var EXECUTABLE_BASE = config.executableBase || "https://raw.githubusercontent.com/lauraevan/greatestgreatest-revive/main/";
+  var COVERS_URL = config.covers || "https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/covers.json";
+  var COVERS_URLS = [COVERS_URL].concat(Array.isArray(config.coversFallbacks) ? config.coversFallbacks : []).filter(Boolean);
   var chunkSize = Math.max(24, Math.min(72, Number(config.chunkSize) || 48));
   var favoritesKey = "neo_games_favorites_v4";
   var recentKey = "neo_games_recent_v4";
@@ -55,7 +55,7 @@
 
   function safeWebUrl(value, base) {
     try {
-      var url = new URL(String(value || ""), base || CATALOG_URL);
+      var url = new URL(String(value || ""), base || document.baseURI);
       if (url.protocol !== "https:" && url.protocol !== "http:") return "";
       url.username = "";
       url.password = "";
@@ -65,28 +65,21 @@
     }
   }
 
-  function executableGameUrl(value) {
-    var url = safeWebUrl(value, EXECUTABLE_BASE);
-    if (!url) return "";
-    var match = url.match(/^https?:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^@/]+)@([^/]+)\/(.+)$/i);
-    if (match) return safeWebUrl("https://raw.githubusercontent.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
-    match = url.match(/^https?:\/\/(?:raw|rawcdn)\.githack\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
-    if (match) return safeWebUrl("https://raw.githubusercontent.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
-    match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:blob|raw)\/([^/]+)\/(.+)$/i);
-    if (match) return safeWebUrl("https://raw.githubusercontent.com/" + match[1] + "/" + match[2] + "/" + match[3] + "/" + match[4]);
-    return url;
-  }
-
-  function absolutePlay(value) {
-    var source = String(value || "").trim();
+  function directGameUrl(value) {
+    var source = safeWebUrl(value);
     if (!source) return "";
-    return executableGameUrl(/^(?:https?:)?\/\//i.test(source) ? source : new URL(source.replace(/^\.?\//, ""), EXECUTABLE_BASE).href);
-  }
-
-  function absoluteImage(value) {
-    var source = String(value || "").trim();
-    if (!source) return "";
-    return safeWebUrl(source, ASSET_BASE);
+    var url = new URL(source);
+    var jsDelivr = url.pathname.match(/^\/gh\/unblockedgames99x-code\/(neo-os-games-\d+-cdn)@([^/]+)\/(games\/[A-Za-z0-9%._()\[\] -]+\.html)$/i);
+    if (/^(?:fastly|cdn|gcore|quantil)\.jsdelivr\.net$/i.test(url.hostname) && jsDelivr) {
+      return "https://rawcdn.githack.com/unblockedgames99x-code/" + jsDelivr[1] + "/" + jsDelivr[2] + "/" + jsDelivr[3];
+    }
+    if (/^(?:raw|rawcdn)\.githack\.com$/i.test(url.hostname) &&
+        /^\/unblockedgames99x-code\/neo-os-games-\d+-cdn\/[^/]+\/games\/[A-Za-z0-9%._()\[\] -]+\.html$/i.test(url.pathname)) {
+      url.hostname = "rawcdn.githack.com";
+      return url.href;
+    }
+    if (url.origin === location.origin && /^\/games\/[A-Za-z0-9%._()\[\] -]+\.html$/i.test(url.pathname)) return url.href;
+    return "";
   }
 
   function stableId(value) {
@@ -99,15 +92,8 @@
     return "ggr-" + (hash >>> 0).toString(36);
   }
 
-  function proxyResource(value, kind) {
-    var client = window.NEO_PROXY_CLIENT;
-    if (!client) return Promise.resolve(value);
-    if (kind === "image" && typeof client.image === "function") return client.image(value);
-    return client.resolve(value, kind || "fetch");
-  }
-
   function coverCandidates(value) {
-    var source = safeWebUrl(value, ASSET_BASE);
+    var source = safeWebUrl(value);
     if (!source) return [];
     var candidates = [source];
     try {
@@ -132,36 +118,35 @@
         return;
       }
       var source = candidates[index++];
-      proxyResource(source, "image").then(function (route) {
-        image.onerror = function () {
-          image.onerror = null;
-          image.removeAttribute("src");
-          tryNext();
-        };
-        image.onload = function () {
-          image.dataset.neoCoverReady = "true";
-          image.dataset.neoCoverSource = source;
-        };
-        image.src = route;
-      }).catch(tryNext);
+      image.onerror = function () {
+        image.onerror = null;
+        image.removeAttribute("src");
+        tryNext();
+      };
+      image.onload = function () {
+        image.dataset.neoCoverReady = "true";
+        image.dataset.neoCoverSource = source;
+      };
+      image.src = source;
     }
     tryNext();
   }
 
-  function normalizeGame(entry, index) {
-    if (!Array.isArray(entry) || entry.length < 4) return null;
-    var source = String(entry[0] || "Unknown source").trim() || "Unknown source";
-    var url = absolutePlay(entry[1]);
-    var name = String(entry[3] || "").replace(/\uFFFD/g, "").trim();
+  function normalizeGame(entry, index, covers) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+    var source = String(entry.source || "NEO Games").trim() || "NEO Games";
+    var url = directGameUrl(entry.file);
+    var name = String(entry.name || "").replace(/\uFFFD/g, "").trim();
     if (!name || !url) return null;
-    var id = stableId([source, name, url].join("|"));
+    var slug = String(entry.slug || "").trim();
+    var id = "neo-game-" + (slug.replace(/[^a-z0-9_-]/gi, "-") || stableId([source, name, url].join("|")));
     return {
       id: id,
       name: name,
       category: source,
       categoryKey: normalize(source) || "other",
       url: url,
-      img: absoluteImage(entry[2]),
+      img: safeWebUrl(covers && covers[slug]),
       featured: index < 96,
       index: index,
       search: normalize([name, source].join(" "))
@@ -433,25 +418,18 @@
     try { return window.parent && window.parent !== window; } catch (_error) { return false; }
   }
 
-  function resetProxyFrame(frame) {
+  function resetGameFrame(frame) {
     clearTimeout(frameTimer);
-    delete frame.dataset.neoProxyReady;
-    delete frame.dataset.neoProxyError;
-    delete frame.dataset.neoProxyRequestId;
-    delete frame.dataset.neoProxySource;
+    delete frame.dataset.neoGameReady;
+    delete frame.dataset.neoGameSource;
     frame.setAttribute("src", "about:blank");
   }
 
-  function requestProxiedEmbed(frame, target) {
-    if (!isEmbedded()) return false;
-    var wrapper = new URL("https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-browser-cdn@87663363da0fe125c5741f716f58bfbce7d4723a/NEO-BROWSER/launch.svg", document.baseURI);
-    wrapper.searchParams.set("neo-app-mode", "1");
-    wrapper.searchParams.set("neo-custom-app", "1");
-    wrapper.searchParams.set("neo-app-target", target);
-    wrapper.searchParams.set("neo-game-mode", "1");
-    frame.dataset.neoProxySource = target;
-    frame.dataset.neoProxyReady = "true";
-    frame.setAttribute("src", wrapper.href);
+  function requestDirectEmbed(frame, target) {
+    var route = directGameUrl(target);
+    if (!route) return false;
+    frame.dataset.neoGameSource = route;
+    frame.setAttribute("src", route);
     return true;
   }
 
@@ -466,7 +444,7 @@
     if (!game) return;
     activeGame = game;
     var frame = $("[data-game-frame]");
-    resetProxyFrame(frame);
+    resetGameFrame(frame);
     $("[data-player-title]").textContent = game.name;
     var shortcutButton = $("[data-player-pin]");
     shortcutButton.disabled = false;
@@ -474,24 +452,20 @@
     shortcutButton.title = "Also adds this game to the home screen";
     $("[data-player]").hidden = false;
     document.documentElement.classList.add("is-playing");
-    showFrameMessage("Loading " + game.name + " through the NEO web proxy…", false);
-    if (!requestProxiedEmbed(frame, game.url)) {
-      showFrameMessage("Open Games inside NEO OS to launch this title through the web proxy.", true);
+    showFrameMessage("Loading " + game.name + " directly…", false);
+    if (!requestDirectEmbed(frame, game.url)) {
+      showFrameMessage("This title is not available from the direct game CDN.", true);
       return;
     }
     remember(game);
     frameTimer = window.setTimeout(function () {
-      if (frame.dataset.neoProxyError === "true") {
-        showFrameMessage("The NEO web proxy could not open this game. Try again.", true);
-      } else if (frame.dataset.neoProxyReady !== "true") {
-        showFrameMessage("Still connecting through the NEO web proxy…", false);
-      }
+      if (frame.dataset.neoGameReady !== "true") showFrameMessage("Still loading the game CDN…", false);
     }, 10000);
   }
 
   function closeGame() {
     var frame = $("[data-game-frame]");
-    resetProxyFrame(frame);
+    resetGameFrame(frame);
     clearTimeout(shortcutTimer);
     shortcutRequestId = "";
     activeGame = null;
@@ -514,7 +488,7 @@
     window.parent.postMessage({
       type: "neo-shell:add-game-shortcut",
       id: shortcutRequestId,
-      game: { title: activeGame.name, url: activeGame.url, icon: activeGame.img }
+      game: { title: activeGame.name, url: activeGame.url, icon: activeGame.img, mode: "direct-game" }
     }, "*");
     shortcutTimer = window.setTimeout(function () {
       if (!shortcutRequestId) return;
@@ -546,59 +520,46 @@
   function observeFrameState() {
     var frame = $("[data-game-frame]");
     frame.addEventListener("load", function () {
-      if (frame.dataset.neoProxyReady !== "true" || frame.getAttribute("src") === "about:blank") return;
+      if (!frame.dataset.neoGameSource || frame.getAttribute("src") === "about:blank") return;
       clearTimeout(frameTimer);
+      frame.dataset.neoGameReady = "true";
       $("[data-frame-status]").classList.add("is-ready");
     });
-    new MutationObserver(function () {
-      if (frame.dataset.neoProxyError === "true") {
-        clearTimeout(frameTimer);
-        showFrameMessage("The NEO web proxy could not open this game. Try again.", true);
-      }
-    }).observe(frame, { attributes: true, attributeFilter: ["data-neo-proxy-error"] });
   }
 
-  function parseCatalogScript(source) {
-    var marker = source.indexOf("window.SCRAPE_GAMES");
-    var start = source.indexOf("[", marker);
-    var end = source.lastIndexOf("];");
-    if (marker < 0 || start < 0 || end <= start) throw new Error("Invalid master scrape list");
-    var serialized = source.slice(start, end + 1).replace(/,\s*\]$/, "\n]");
-    var rows = JSON.parse(serialized);
-    if (!Array.isArray(rows)) throw new Error("Invalid master scrape list");
-    return rows;
-  }
-
-  async function fetchCatalogRows() {
+  async function fetchJsonFallback(urls, label) {
     var lastError = null;
-    for (var index = 0; index < CATALOG_URLS.length; index += 1) {
+    for (var index = 0; index < urls.length; index += 1) {
       var controller = new AbortController();
       var timer = window.setTimeout(function () { controller.abort(); }, 15000);
       try {
-        // This is a trusted, read-only data file rather than a playable URL.
-        // Loading it directly avoids booting the full browsing transport before
-        // the catalogue can render; covers and every game launch stay proxied.
-        var response = await fetch(CATALOG_URLS[index], {
+        var response = await fetch(urls[index], {
           credentials: "omit",
           cache: "force-cache",
           mode: "cors",
           signal: controller.signal
         });
-        if (!response.ok) throw new Error("Catalogue returned " + response.status);
-        return parseCatalogScript(await response.text());
+        if (!response.ok) throw new Error(label + " returned " + response.status);
+        return await response.json();
       } catch (error) {
         lastError = error;
       } finally {
         clearTimeout(timer);
       }
     }
-    throw lastError || new Error("The game catalogue is unavailable");
+    throw lastError || new Error(label + " is unavailable");
   }
 
   async function loadCatalog() {
-    var rows = await fetchCatalogRows();
+    var loaded = await Promise.all([
+      fetchJsonFallback(CATALOG_URLS, "The game catalogue"),
+      fetchJsonFallback(COVERS_URLS, "The cover catalogue").catch(function () { return {}; })
+    ]);
+    var rows = loaded[0];
+    var covers = loaded[1];
+    if (!Array.isArray(rows)) throw new Error("The direct game catalogue is invalid");
     var seen = new Set();
-    catalog = rows.map(normalizeGame).filter(function (game) {
+    catalog = rows.map(function (entry, index) { return normalizeGame(entry, index, covers); }).filter(function (game) {
       if (!game || seen.has(game.id)) return false;
       seen.add(game.id);
       return true;
@@ -637,7 +598,7 @@
     register({
       name: "open_neo_game",
       title: "Open NEO Game",
-      description: "Open one game from the master catalogue through the NEO web proxy.",
+      description: "Open one game directly from the NEO game CDN.",
       inputSchema: { type: "object", properties: { id: { type: "string", minLength: 1, maxLength: 160 } }, required: ["id"], additionalProperties: false },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: function (input) {
@@ -645,7 +606,7 @@
         var game = gamesById.get(input.id);
         if (!game) throw new Error("Game not found");
         openGame(game);
-        return { id: game.id, title: game.name, status: "opening-through-proxy" };
+        return { id: game.id, title: game.name, status: "opening-directly" };
       }
     });
     window.addEventListener("pagehide", function () { lifecycle.abort(); }, { once: true });
