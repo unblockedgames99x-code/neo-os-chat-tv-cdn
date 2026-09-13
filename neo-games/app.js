@@ -444,7 +444,7 @@
 
   function requestProxiedEmbed(frame, target) {
     if (!isEmbedded()) return false;
-    var wrapper = new URL("https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-browser-cdn@396a3de5ccac2650cfab7f33aa9c5e3c36ca4e78/NEO-BROWSER/launch.svg", document.baseURI);
+    var wrapper = new URL("https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-browser-cdn@cfe5196674de64378442dfb3aa10f135a3d049cb/NEO-BROWSER/launch.svg", document.baseURI);
     wrapper.searchParams.set("neo-app-mode", "1");
     wrapper.searchParams.set("neo-custom-app", "1");
     wrapper.searchParams.set("neo-app-target", target);
