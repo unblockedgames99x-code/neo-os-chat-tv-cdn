@@ -2,10 +2,10 @@
   "use strict";
 
   var config = window.NEO_GAMES_CONFIG || {};
-  var CATALOG_URL = "https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/index.json";
+  var CATALOG_URL = "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/scrapegames.js";
   var CATALOG_URLS = [config.catalog || CATALOG_URL].concat(Array.isArray(config.catalogFallbacks) ? config.catalogFallbacks : []).filter(Boolean);
-  var COVERS_URL = config.covers || "https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/covers.json";
-  var COVERS_URLS = [COVERS_URL].concat(Array.isArray(config.coversFallbacks) ? config.coversFallbacks : []).filter(Boolean);
+  var ASSET_BASE = config.assetBase || "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/";
+  var EXECUTABLE_BASE = config.executableBase || "https://raw.githack.com/lauraevan/greatestgreatest-revive/main/";
   var chunkSize = Math.max(24, Math.min(72, Number(config.chunkSize) || 48));
   var favoritesKey = "neo_games_favorites_v4";
   var recentKey = "neo_games_recent_v4";
@@ -66,20 +66,30 @@
   }
 
   function directGameUrl(value) {
-    var source = safeWebUrl(value);
+    var source = String(value || "").trim();
+    if (source && !/^(?:https?:)?\/\//i.test(source)) {
+      source = new URL(source.replace(/^\.?\//, ""), EXECUTABLE_BASE).href;
+    }
+    source = safeWebUrl(source, EXECUTABLE_BASE);
     if (!source) return "";
     var url = new URL(source);
-    var jsDelivr = url.pathname.match(/^\/gh\/unblockedgames99x-code\/(neo-os-games-\d+-cdn)@([^/]+)\/(games\/[A-Za-z0-9%._()\[\] -]+\.html)$/i);
+    var jsDelivr = url.pathname.match(/^\/gh\/([^/]+)\/([^@/]+)@([^/]+)\/(.+)$/i);
     if (/^(?:fastly|cdn|gcore|quantil)\.jsdelivr\.net$/i.test(url.hostname) && jsDelivr) {
-      return "https://rawcdn.githack.com/unblockedgames99x-code/" + jsDelivr[1] + "/" + jsDelivr[2] + "/" + jsDelivr[3];
+      return "https://rawcdn.githack.com/" + jsDelivr[1] + "/" + jsDelivr[2] + "/" + jsDelivr[3] + "/" + jsDelivr[4];
     }
-    if (/^(?:raw|rawcdn)\.githack\.com$/i.test(url.hostname) &&
-        /^\/unblockedgames99x-code\/neo-os-games-\d+-cdn\/[^/]+\/games\/[A-Za-z0-9%._()\[\] -]+\.html$/i.test(url.pathname)) {
+    var rawGithub = url.pathname.match(/^\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
+    if (url.hostname === "raw.githubusercontent.com" && rawGithub) {
+      return "https://rawcdn.githack.com/" + rawGithub[1] + "/" + rawGithub[2] + "/" + rawGithub[3] + "/" + rawGithub[4];
+    }
+    var githubFile = url.pathname.match(/^\/([^/]+)\/([^/]+)\/(?:blob|raw)\/([^/]+)\/(.+)$/i);
+    if (url.hostname === "github.com" && githubFile) {
+      return "https://rawcdn.githack.com/" + githubFile[1] + "/" + githubFile[2] + "/" + githubFile[3] + "/" + githubFile[4];
+    }
+    if (/^(?:raw|rawcdn)\.githack\.com$/i.test(url.hostname)) {
       url.hostname = "rawcdn.githack.com";
       return url.href;
     }
-    if (url.origin === location.origin && /^\/games\/[A-Za-z0-9%._()\[\] -]+\.html$/i.test(url.pathname)) return url.href;
-    return "";
+    return url.href;
   }
 
   function stableId(value) {
@@ -132,21 +142,20 @@
     tryNext();
   }
 
-  function normalizeGame(entry, index, covers) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
-    var source = String(entry.source || "NEO Games").trim() || "NEO Games";
-    var url = directGameUrl(entry.file);
-    var name = String(entry.name || "").replace(/\uFFFD/g, "").trim();
+  function normalizeGame(entry, index) {
+    if (!Array.isArray(entry) || entry.length < 4) return null;
+    var source = String(entry[0] || "NEO Games").trim() || "NEO Games";
+    var url = directGameUrl(entry[1]);
+    var name = String(entry[3] || "").replace(/\uFFFD/g, "").trim();
     if (!name || !url) return null;
-    var slug = String(entry.slug || "").trim();
-    var id = "neo-game-" + (slug.replace(/[^a-z0-9_-]/gi, "-") || stableId([source, name, url].join("|")));
+    var id = stableId([source, name, url].join("|"));
     return {
       id: id,
       name: name,
       category: source,
       categoryKey: normalize(source) || "other",
       url: url,
-      img: safeWebUrl(covers && covers[slug]),
+      img: safeWebUrl(entry[2], ASSET_BASE),
       featured: index < 96,
       index: index,
       search: normalize([name, source].join(" "))
@@ -527,7 +536,17 @@
     });
   }
 
-  async function fetchJsonFallback(urls, label) {
+  function parseCatalogScript(source) {
+    var marker = source.indexOf("window.SCRAPE_GAMES");
+    var start = source.indexOf("[", marker);
+    var end = source.lastIndexOf("];");
+    if (marker < 0 || start < 0 || end <= start) throw new Error("Invalid master game list");
+    var rows = JSON.parse(source.slice(start, end + 1).replace(/,\s*\]$/, "\n]"));
+    if (!Array.isArray(rows)) throw new Error("Invalid master game list");
+    return rows;
+  }
+
+  async function fetchCatalogRows(urls) {
     var lastError = null;
     for (var index = 0; index < urls.length; index += 1) {
       var controller = new AbortController();
@@ -539,27 +558,21 @@
           mode: "cors",
           signal: controller.signal
         });
-        if (!response.ok) throw new Error(label + " returned " + response.status);
-        return await response.json();
+        if (!response.ok) throw new Error("The game catalogue returned " + response.status);
+        return parseCatalogScript(await response.text());
       } catch (error) {
         lastError = error;
       } finally {
         clearTimeout(timer);
       }
     }
-    throw lastError || new Error(label + " is unavailable");
+    throw lastError || new Error("The game catalogue is unavailable");
   }
 
   async function loadCatalog() {
-    var loaded = await Promise.all([
-      fetchJsonFallback(CATALOG_URLS, "The game catalogue"),
-      fetchJsonFallback(COVERS_URLS, "The cover catalogue").catch(function () { return {}; })
-    ]);
-    var rows = loaded[0];
-    var covers = loaded[1];
-    if (!Array.isArray(rows)) throw new Error("The direct game catalogue is invalid");
+    var rows = await fetchCatalogRows(CATALOG_URLS);
     var seen = new Set();
-    catalog = rows.map(function (entry, index) { return normalizeGame(entry, index, covers); }).filter(function (game) {
+    catalog = rows.map(function (entry, index) { return normalizeGame(entry, index); }).filter(function (game) {
       if (!game || seen.has(game.id)) return false;
       seen.add(game.id);
       return true;

@@ -1,13 +1,10 @@
 window.NEO_GAMES_CONFIG = Object.freeze({
-  catalog: "https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/index.json",
+  catalog: "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/scrapegames.js",
   catalogFallbacks: [
-    "https://cdn.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/index.json",
-    "https://gcore.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/index.json"
+    "https://raw.githack.com/lauraevan/greatestgreatest-revive/main/scrapegames.js",
+    "https://raw.githubusercontent.com/lauraevan/greatestgreatest-revive/main/scrapegames.js"
   ],
-  covers: "https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/covers.json",
-  coversFallbacks: [
-    "https://cdn.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/covers.json",
-    "https://gcore.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/covers.json"
-  ],
+  assetBase: "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/",
+  executableBase: "https://raw.githack.com/lauraevan/greatestgreatest-revive/main/",
   chunkSize: 48
 });
