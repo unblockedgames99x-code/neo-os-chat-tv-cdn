@@ -315,7 +315,7 @@
     $("[data-last-played]").textContent = formatLastPlayed(stats.lastPlayed);
     $("[data-play-time]").textContent = formatPlayTime(stats.seconds);
     $("[data-about-title]").textContent = game.name + " is ready";
-    $("[data-about-copy]").textContent = "Launch this title directly through the Fern game service. NEO Games keeps your favorites, recent history, and play time on this device.";
+    $("[data-about-copy]").textContent = "Launch this title directly through the Fern game service. Steam keeps your favorites, recent history, and play time on this device.";
     $("[data-meta-category]").textContent = category;
     $("[data-meta-id]").textContent = game.id;
     $("[data-game-source]").textContent = providerLabel;
@@ -536,7 +536,7 @@
     game = game || state.activeGame || state.selected;
     if (!game) return;
     if (!isEmbedded()) {
-      showToast("Open NEO Games inside NEO OS to add a taskbar shortcut.");
+      showToast("Open Steam inside NEO OS to add a taskbar shortcut.");
       return;
     }
     var button = state.activeGame ? $("[data-player-pin]") : $("[data-detail-pin]");
@@ -622,7 +622,7 @@
       var libraryToggle = event.target.closest("[data-toggle-library]");
       if (libraryToggle) { setGroupExpanded(libraryToggle, libraryToggle.getAttribute("aria-expanded") !== "true"); return; }
       var menu = event.target.closest("[data-menu]");
-      if (menu) showToast(menu.dataset.menu === "help" ? "Choose a game and select Play. Favorites and play time stay on this device." : "The focused NEO Games library view is already active.");
+      if (menu) showToast(menu.dataset.menu === "help" ? "Choose a game and select Play. Favorites and play time stay on this device." : "The Steam library view is already active.");
     });
 
     $("[data-search]").addEventListener("input", function (event) {
