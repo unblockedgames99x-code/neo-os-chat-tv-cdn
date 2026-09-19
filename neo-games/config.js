@@ -7,7 +7,7 @@ window.NEO_GAMES_CONFIG = Object.freeze({
   pageSize: 48,
   imageBatchSize: 8,
   searchDelay: 300,
-  providerLabel: "Fern + Aether + GN Math",
+  providerLabel: "Fern + Aether + GN Math + StaticQuasar",
   aether: {
     base: "https://gn-local.booksforschool.online/",
     catalog: "offline/catalog.json",
@@ -20,5 +20,10 @@ window.NEO_GAMES_CONFIG = Object.freeze({
     coverBase: "https://cdn.jsdelivr.net/gh/freebuisness/covers@main/",
     gameBase: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
     expectedCount: 836
+  },
+  staticQuasar: {
+    catalog: "https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/index.json",
+    covers: "https://fastly.jsdelivr.net/gh/unblockedgames99x-code/neo-os-games-catalog-cdn@main/covers.json",
+    expectedCount: 885
   }
 });
