@@ -40,6 +40,8 @@
   var frameTimer = 0;
   var shortcutTimer = 0;
   var shortcutRequestId = "";
+  var gameWindowTimer = 0;
+  var gameWindowRequestId = "";
 
   function $(selector, root) {
     return (root || document).querySelector(selector);
@@ -471,6 +473,39 @@
       state.activeLaunchUrl = launchUrl;
       state.sessionStartedAt = Date.now();
       rememberLaunch(game);
+      if (isEmbedded()) {
+        clearTimeout(gameWindowTimer);
+        gameWindowRequestId = "game-window-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        window.parent.postMessage({
+          type: "neo-shell:open-game-window",
+          id: gameWindowRequestId,
+          game: {
+            id: game.id,
+            title: game.name,
+            url: launchUrl,
+            icon: state.imageUrls.get(game.id) || "",
+            mode: "direct-game"
+          }
+        }, shellOrigin);
+        $("[data-game-status]").textContent = "Opening in a separate window…";
+        gameWindowTimer = window.setTimeout(function () {
+          if (!gameWindowRequestId) return;
+          gameWindowRequestId = "";
+          openInlineGame(game, launchUrl);
+          showToast("The OS window did not answer, so the game opened here instead.");
+        }, 8000);
+        return;
+      }
+      openInlineGame(game, launchUrl);
+    } catch (error) {
+      showToast(cleanText(error && error.message, "This game could not be launched."));
+      $("[data-game-status]").textContent = "Launch unavailable";
+    } finally {
+      playButton.disabled = false;
+    }
+  }
+
+  function openInlineGame(game, launchUrl) {
       var frame = $("[data-game-frame]");
       resetGameFrame(frame);
       $("[data-player-title]").textContent = game.name;
@@ -485,12 +520,6 @@
       frameTimer = window.setTimeout(function () {
         if (frame.dataset.neoGameReady !== "true") showFrameMessage("Still loading " + game.name, "The game service is taking longer than usual.", false);
       }, 12000);
-    } catch (error) {
-      showToast(cleanText(error && error.message, "This game could not be launched."));
-      $("[data-game-status]").textContent = "Launch unavailable";
-    } finally {
-      playButton.disabled = false;
-    }
   }
 
   function recordSession() {
@@ -503,6 +532,7 @@
   }
 
   function closeGame() {
+    exitPlayerFullscreen();
     recordSession();
     resetGameFrame($("[data-game-frame]"));
     clearTimeout(shortcutTimer);
@@ -514,6 +544,17 @@
     $("[data-player]").hidden = true;
     document.documentElement.classList.remove("is-playing");
     if (selected) selectGame(selected, { fromHistory: true });
+  }
+
+  function exitPlayerFullscreen() {
+    var fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!fullscreenElement) return;
+    var exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (typeof exit !== "function") return;
+    try {
+      var result = exit.call(document);
+      if (result && typeof result.catch === "function") result.catch(function () {});
+    } catch (_error) {}
   }
 
   function refreshGame() {
@@ -579,6 +620,33 @@
       if (button === $("[data-player-pin]")) button.textContent = "Try again";
       showToast(cleanText(data.error, "The shortcut could not be added."));
     }
+  }
+
+  function handleShellGameWindow(event) {
+    if (event.source !== window.parent) return;
+    var data = event.data;
+    if (!data || typeof data !== "object") return;
+    if (data.type === "neo-shell:open-game-window-result" && data.id === gameWindowRequestId) {
+      clearTimeout(gameWindowTimer);
+      gameWindowRequestId = "";
+      if (data.ok) {
+        $("[data-game-status]").textContent = "Running in a separate window";
+        showToast((state.activeGame ? state.activeGame.name : "Game") + " opened in its own window.");
+      } else {
+        var game = state.activeGame;
+        var launchUrl = state.activeLaunchUrl;
+        if (game && launchUrl) openInlineGame(game, launchUrl);
+        showToast(cleanText(data.error, "The separate game window could not be opened."));
+      }
+      return;
+    }
+    if (data.type !== "neo-shell:game-window-closed") return;
+    if (!state.activeGame || (data.gameId && String(data.gameId) !== String(state.activeGame.id))) return;
+    recordSession();
+    try { if (window.Lumin && typeof window.Lumin.endGame === "function") window.Lumin.endGame(); } catch (_error) {}
+    state.activeGame = null;
+    state.activeLaunchUrl = "";
+    $("[data-game-status]").textContent = "✓ Ready to play";
   }
 
   function gameTitleForShortcut() {
@@ -666,6 +734,7 @@
       if (event.key === "Escape" && !$("[data-player]").hidden && !document.fullscreenElement) closeGame();
     });
     window.addEventListener("message", handleShellShortcutResult);
+    window.addEventListener("message", handleShellGameWindow);
     window.addEventListener("beforeunload", recordSession);
   }
 
