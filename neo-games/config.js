@@ -1,10 +1,11 @@
 window.NEO_GAMES_CONFIG = Object.freeze({
-  catalog: "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/scrapegames.js",
-  catalogFallbacks: [
-    "https://raw.githack.com/lauraevan/greatestgreatest-revive/main/scrapegames.js",
-    "https://raw.githubusercontent.com/lauraevan/greatestgreatest-revive/main/scrapegames.js"
+  provider: "fern-lumin",
+  sdk: "https://cdn.jsdelivr.net/gh/luminsdk/script@e1107337f26529e032d7873cbbb310d485d5d403/fonts.min.js",
+  sdkFallbacks: [
+    "https://cdn.jsdelivr.net/gh/luminsdk/script@latest/fonts.min.js"
   ],
-  assetBase: "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/",
-  executableBase: "https://raw.githack.com/lauraevan/greatestgreatest-revive/main/",
-  chunkSize: 48
+  pageSize: 48,
+  imageBatchSize: 8,
+  searchDelay: 300,
+  providerLabel: "Fern"
 });

@@ -2,429 +2,437 @@
   "use strict";
 
   var config = window.NEO_GAMES_CONFIG || {};
-  var CATALOG_URL = "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/scrapegames.js";
-  var CATALOG_URLS = [config.catalog || CATALOG_URL].concat(Array.isArray(config.catalogFallbacks) ? config.catalogFallbacks : []).filter(Boolean);
-  var ASSET_BASE = config.assetBase || "https://cdn.jsdelivr.net/gh/lauraevan/greatestgreatest-revive@main/";
-  var EXECUTABLE_BASE = config.executableBase || "https://raw.githack.com/lauraevan/greatestgreatest-revive/main/";
-  var chunkSize = Math.max(24, Math.min(72, Number(config.chunkSize) || 48));
-  var favoritesKey = "neo_games_favorites_v4";
-  var recentKey = "neo_games_recent_v4";
-  var catalog = [];
-  var discoverCatalog = [];
-  var gamesById = new Map();
-  var sourceCounts = new Map();
-  var favorites = new Set(read(favoritesKey, []));
-  var recent = read(recentKey, []);
-  var matches = [];
-  var mode = "home";
-  var category = "all";
-  var sortMode = "title-asc";
-  var query = "";
-  var visible = 0;
-  var activeGame = null;
+  var pageSize = Math.max(12, Number(config.pageSize) || 48);
+  var imageBatchSize = Math.max(1, Number(config.imageBatchSize) || 8);
+  var searchDelay = Math.max(100, Number(config.searchDelay) || 300);
+  var providerLabel = String(config.providerLabel || "Fern");
+  var favoritesKey = "neo_games_fern_favorites_v1";
+  var statsKey = "neo_games_fern_stats_v1";
+  var recentKey = "neo_games_fern_recent_v1";
+  var shellOrigin = "*";
+
+  var state = {
+    ready: false,
+    loading: false,
+    failed: false,
+    games: [],
+    total: 0,
+    page: 0,
+    pages: 1,
+    query: "",
+    selected: null,
+    activeGame: null,
+    activeLaunchUrl: "",
+    sessionStartedAt: 0,
+    requestToken: 0,
+    history: [],
+    historyIndex: -1,
+    favorites: new Set(readStore(favoritesKey, [])),
+    stats: readStore(statsKey, {}),
+    recent: readStore(recentKey, []),
+    gameMap: new Map(),
+    imageUrls: new Map(),
+    launchUrls: new Map()
+  };
+
+  var searchTimer = 0;
+  var toastTimer = 0;
   var frameTimer = 0;
   var shortcutTimer = 0;
   var shortcutRequestId = "";
-  var loadObserver = null;
 
-  function $(selector, root) { return (root || document).querySelector(selector); }
-  function $$(selector, root) { return Array.from((root || document).querySelectorAll(selector)); }
+  function $(selector, root) {
+    return (root || document).querySelector(selector);
+  }
 
-  function read(key, fallback) {
+  function $$(selector, root) {
+    return Array.from((root || document).querySelectorAll(selector));
+  }
+
+  function readStore(key, fallback) {
     try {
       var value = JSON.parse(localStorage.getItem(key) || "null");
-      return value == null ? fallback : value;
+      return value === null ? fallback : value;
     } catch (_error) {
       return fallback;
     }
   }
 
-  function save(key, value) {
+  function writeStore(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (_error) {}
   }
 
-  function normalize(value) {
-    return String(value || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  function cleanText(value, fallback) {
+    var text = String(value == null ? "" : value).replace(/\s+/g, " ").trim();
+    return text || fallback || "";
   }
 
-  function titleCase(value) {
-    return String(value || "Other").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().replace(/\b\w/g, function (letter) {
-      return letter.toUpperCase();
-    }) || "Other";
-  }
-
-  function safeWebUrl(value, base) {
+  function safeUrl(value) {
     try {
-      var url = new URL(String(value || ""), base || document.baseURI);
-      if (url.protocol !== "https:" && url.protocol !== "http:") return "";
-      url.username = "";
-      url.password = "";
-      return url.href;
+      var url = new URL(String(value || ""), location.href);
+      return /^(https?:)$/i.test(url.protocol) ? url.href : "";
     } catch (_error) {
       return "";
     }
   }
 
-  function directGameUrl(value) {
-    var source = String(value || "").trim();
-    if (source && !/^(?:https?:)?\/\//i.test(source)) {
-      source = new URL(source.replace(/^\.?\//, ""), EXECUTABLE_BASE).href;
-    }
-    source = safeWebUrl(source, EXECUTABLE_BASE);
-    if (!source) return "";
-    var url = new URL(source);
-    var jsDelivr = url.pathname.match(/^\/gh\/([^/]+)\/([^@/]+)@([^/]+)\/(.+)$/i);
-    if (/^(?:fastly|cdn|gcore|quantil)\.jsdelivr\.net$/i.test(url.hostname) && jsDelivr) {
-      return "https://rawcdn.githack.com/" + jsDelivr[1] + "/" + jsDelivr[2] + "/" + jsDelivr[3] + "/" + jsDelivr[4];
-    }
-    var rawGithub = url.pathname.match(/^\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
-    if (url.hostname === "raw.githubusercontent.com" && rawGithub) {
-      return "https://rawcdn.githack.com/" + rawGithub[1] + "/" + rawGithub[2] + "/" + rawGithub[3] + "/" + rawGithub[4];
-    }
-    var githubFile = url.pathname.match(/^\/([^/]+)\/([^/]+)\/(?:blob|raw)\/([^/]+)\/(.+)$/i);
-    if (url.hostname === "github.com" && githubFile) {
-      return "https://rawcdn.githack.com/" + githubFile[1] + "/" + githubFile[2] + "/" + githubFile[3] + "/" + githubFile[4];
-    }
-    if (/^(?:raw|rawcdn)\.githack\.com$/i.test(url.hostname)) {
-      url.hostname = "rawcdn.githack.com";
-      return url.href;
-    }
-    return url.href;
-  }
-
-  function stableId(value) {
-    var hash = 2166136261;
-    var text = String(value || "");
-    for (var index = 0; index < text.length; index += 1) {
-      hash ^= text.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-    return "ggr-" + (hash >>> 0).toString(36);
-  }
-
-  function coverCandidates(value) {
-    var source = safeWebUrl(value);
-    if (!source) return [];
-    var candidates = [source];
-    try {
-      var url = new URL(source);
-      if (/^(?:cdn|fastly|gcore)\.jsdelivr\.net$/i.test(url.hostname)) {
-        ["cdn.jsdelivr.net", "fastly.jsdelivr.net", "gcore.jsdelivr.net"].forEach(function (hostname) {
-          var alternate = new URL(url.href);
-          alternate.hostname = hostname;
-          candidates.push(alternate.href);
-        });
-      }
-    } catch (_error) {}
-    return candidates.filter(function (candidate, index, list) { return list.indexOf(candidate) === index; });
-  }
-
-  function loadCoverImage(image, value) {
-    var candidates = coverCandidates(value);
-    var index = 0;
-    function tryNext() {
-      if (index >= candidates.length) {
-        image.remove();
-        return;
-      }
-      var source = candidates[index++];
-      image.onerror = function () {
-        image.onerror = null;
-        image.removeAttribute("src");
-        tryNext();
-      };
-      image.onload = function () {
-        image.dataset.neoCoverReady = "true";
-        image.dataset.neoCoverSource = source;
-      };
-      image.src = source;
-    }
-    tryNext();
-  }
-
-  function normalizeGame(entry, index) {
-    if (!Array.isArray(entry) || entry.length < 4) return null;
-    var source = String(entry[0] || "NEO Games").trim() || "NEO Games";
-    var url = directGameUrl(entry[1]);
-    var name = String(entry[3] || "").replace(/\uFFFD/g, "").trim();
-    if (!name || !url) return null;
-    var id = stableId([source, name, url].join("|"));
+  function normalizeGame(raw, index) {
+    raw = raw || {};
+    var id = cleanText(raw.id || raw.game_id || raw.slug, "fern-game-" + index);
     return {
       id: id,
-      name: name,
-      category: source,
-      categoryKey: normalize(source) || "other",
-      url: url,
-      img: safeWebUrl(entry[2], ASSET_BASE),
-      featured: index < 96,
-      index: index,
-      search: normalize([name, source].join(" "))
+      name: cleanText(raw.name || raw.title, "Untitled game"),
+      category: cleanText(raw.category || raw.genre || raw.type, "Game"),
+      imageToken: cleanText(raw.image_token || raw.imageToken || raw.image, ""),
+      raw: raw
     };
   }
 
-  function saveFavorites() {
-    save(favoritesKey, Array.from(favorites).slice(0, 5000));
+  function loadScript(url) {
+    return new Promise(function (resolve, reject) {
+      var script = document.createElement("script");
+      script.src = url;
+      script.async = true;
+      script.crossOrigin = "anonymous";
+      script.onload = resolve;
+      script.onerror = function () { reject(new Error("Unable to load the Fern runtime")); };
+      document.head.appendChild(script);
+    });
   }
 
-  function remember(game) {
-    recent = [game.id].concat(recent.filter(function (id) { return id !== game.id; })).slice(0, 48);
-    save(recentKey, recent);
+  async function ensureProviderScript() {
+    if (window.Lumin) return;
+    var urls = [config.sdk].concat(Array.isArray(config.sdkFallbacks) ? config.sdkFallbacks : []).filter(Boolean);
+    var lastError = null;
+    for (var index = 0; index < urls.length; index += 1) {
+      try {
+        await loadScript(urls[index]);
+        if (window.Lumin) return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error("The Fern runtime is unavailable");
   }
 
-  function createSymbol(className) {
-    var symbol = document.createElement("span");
-    symbol.className = className;
-    symbol.setAttribute("aria-hidden", "true");
-    symbol.textContent = "×";
-    return symbol;
+  async function initializeProvider() {
+    await ensureProviderScript();
+    if (!window.Lumin || typeof window.Lumin.init !== "function") throw new Error("The Fern runtime did not initialize");
+    await new Promise(function (resolve, reject) {
+      var settled = false;
+      var timer = window.setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        reject(new Error("Fern took too long to respond"));
+      }, 18000);
+      function finish() {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      }
+      function fail(error) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(cleanText(error && error.message, "Fern could not initialize")));
+      }
+      try {
+        var result = window.Lumin.init({ headless: true, onReady: finish, onError: fail });
+        if (result && typeof result.then === "function") result.then(finish).catch(fail);
+      } catch (error) {
+        fail(error);
+      }
+    });
   }
 
-  function createCard(game) {
-    var card = document.createElement("article");
-    card.className = "game-card";
-    card.dataset.gameId = game.id;
+  function setProviderStatus(message, mode) {
+    var status = $("[data-provider-status]");
+    status.classList.toggle("is-online", mode === "online");
+    status.classList.toggle("is-error", mode === "error");
+    status.lastElementChild.textContent = message;
+    $("[data-footer-status]").textContent = message;
+  }
 
-    var launch = document.createElement("button");
-    launch.type = "button";
-    launch.className = "game-card-open";
-    launch.dataset.openGame = game.id;
-    launch.setAttribute("aria-label", "Play " + game.name);
+  function showToast(message) {
+    clearTimeout(toastTimer);
+    var toast = $("[data-toast]");
+    toast.textContent = message;
+    toast.hidden = false;
+    toastTimer = window.setTimeout(function () { toast.hidden = true; }, 2600);
+  }
 
-    var cover = document.createElement("span");
-    cover.className = "cover";
-    cover.appendChild(createSymbol("cover-symbol"));
-    if (game.img) {
+  function formatCategory(value) {
+    var text = cleanText(value, "Game");
+    return text.replace(/[-_]+/g, " ").replace(/\b\w/g, function (letter) { return letter.toUpperCase(); });
+  }
+
+  function formatLastPlayed(timestamp) {
+    if (!timestamp) return "Never";
+    var date = new Date(timestamp);
+    var today = new Date();
+    if (date.toDateString() === today.toDateString()) return "Today at " + date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return date.toLocaleDateString([], { month: "short", day: "numeric", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+  }
+
+  function formatPlayTime(seconds) {
+    var minutes = Math.floor((Number(seconds) || 0) / 60);
+    if (minutes < 1) return seconds > 0 ? "Less than a minute" : "0 minutes";
+    if (minutes < 60) return minutes + (minutes === 1 ? " minute" : " minutes");
+    var hours = Math.floor(minutes / 60);
+    var remainder = minutes % 60;
+    return hours + (hours === 1 ? " hour" : " hours") + (remainder ? " " + remainder + " min" : "");
+  }
+
+  function getGameStats(game) {
+    return state.stats[game.id] || { seconds: 0, lastPlayed: 0 };
+  }
+
+  function gameInitial(game) {
+    return cleanText(game.name, "G").charAt(0).toUpperCase();
+  }
+
+  function createGameListItem(game, favoriteSection) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "game-list-item" + (state.selected && state.selected.id === game.id ? " is-selected" : "");
+    button.dataset.openGame = game.id;
+    button.dataset.gameId = game.id;
+    button.title = game.name;
+
+    var imageUrl = state.imageUrls.get(game.id);
+    var icon;
+    if (imageUrl) {
+      icon = document.createElement("img");
+      icon.src = imageUrl;
+      icon.alt = "";
+      icon.loading = "lazy";
+      icon.decoding = "async";
+      icon.addEventListener("error", function () {
+        var fallback = document.createElement("span");
+        fallback.className = "game-icon-fallback";
+        fallback.textContent = gameInitial(game);
+        icon.replaceWith(fallback);
+      }, { once: true });
+    } else {
+      icon = document.createElement("span");
+      icon.className = "game-icon-fallback";
+      icon.textContent = gameInitial(game);
+    }
+
+    var name = document.createElement("span");
+    name.className = "game-name";
+    name.textContent = game.name;
+    button.append(icon, name);
+
+    if (!favoriteSection && state.favorites.has(game.id)) {
+      var star = document.createElement("span");
+      star.className = "favorite-star";
+      star.textContent = "★";
+      star.setAttribute("aria-label", "Favorite");
+      button.appendChild(star);
+    }
+    return button;
+  }
+
+  function renderLists() {
+    var list = $("[data-game-list]");
+    var favoritesList = $("[data-favorites-list]");
+    var fragment = document.createDocumentFragment();
+    state.games.forEach(function (game) { fragment.appendChild(createGameListItem(game, false)); });
+    list.replaceChildren(fragment);
+
+    var favoriteGames = [];
+    state.favorites.forEach(function (id) {
+      var game = state.gameMap.get(id);
+      if (game) favoriteGames.push(game);
+    });
+    favoriteGames.sort(function (a, b) { return a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }); });
+    var favoriteFragment = document.createDocumentFragment();
+    favoriteGames.forEach(function (game) { favoriteFragment.appendChild(createGameListItem(game, true)); });
+    favoritesList.replaceChildren(favoriteFragment);
+    $("[data-favorites-group]").hidden = favoriteGames.length === 0;
+    $("[data-favorite-count]").textContent = favoriteGames.length.toLocaleString();
+    $("[data-loaded-count]").textContent = state.games.length.toLocaleString() + (state.total > state.games.length ? " / " + state.total.toLocaleString() : "");
+    $("[data-load-more]").hidden = state.loading || state.page >= state.pages;
+    $("[data-list-state]").hidden = state.games.length > 0 && !state.loading;
+    if (state.loading) $("[data-list-state]").textContent = state.query ? "Searching the Fern catalog…" : "Loading games from Fern…";
+    else if (!state.games.length) $("[data-list-state]").textContent = state.query ? "No Fern games match this search." : "The Fern catalog is empty.";
+  }
+
+  function updateImageNodes(game, url) {
+    $$('[data-game-id]').forEach(function (node) {
+      if (node.dataset.gameId !== game.id) return;
+      var current = node.firstElementChild;
+      if (current && current.tagName === "IMG") {
+        current.src = url;
+        return;
+      }
       var image = document.createElement("img");
+      image.src = url;
       image.alt = "";
       image.loading = "lazy";
       image.decoding = "async";
-      image.fetchPriority = "low";
-      cover.appendChild(image);
-      loadCoverImage(image, game.img);
+      if (current) current.replaceWith(image); else node.prepend(image);
+    });
+    if (state.selected && state.selected.id === game.id) updateHeroImage(game);
+  }
+
+  async function requestImage(game) {
+    if (!game || !game.imageToken || state.imageUrls.has(game.id) || !window.Lumin || typeof window.Lumin.getImageUrl !== "function") return;
+    try {
+      var result = await window.Lumin.getImageUrl(game.imageToken);
+      var url = safeUrl(typeof result === "string" ? result : result && (result.url || result.image_url));
+      if (!url) return;
+      state.imageUrls.set(game.id, url);
+      updateImageNodes(game, url);
+    } catch (_error) {}
+  }
+
+  async function loadImages(games) {
+    for (var index = 0; index < games.length; index += imageBatchSize) {
+      await Promise.all(games.slice(index, index + imageBatchSize).map(requestImage));
     }
-    var play = document.createElement("span");
-    play.className = "play-mark";
-    play.setAttribute("aria-hidden", "true");
-    play.textContent = "▶";
-    cover.appendChild(play);
-
-    var copy = document.createElement("span");
-    copy.className = "copy";
-    var title = document.createElement("strong");
-    title.textContent = game.name;
-    var meta = document.createElement("small");
-    meta.textContent = game.category;
-    copy.append(title, meta);
-    launch.append(cover, copy);
-
-    var favorite = document.createElement("button");
-    favorite.type = "button";
-    favorite.className = "favorite";
-    favorite.dataset.favoriteGame = game.id;
-    updateFavoriteButton(favorite, game);
-    card.append(launch, favorite);
-    return card;
   }
 
-  function updateFavoriteButton(button, game) {
-    var selected = favorites.has(game.id);
-    button.classList.toggle("is-favorite", selected);
-    button.textContent = selected ? "♥" : "♡";
-    button.setAttribute("aria-label", (selected ? "Remove " : "Add ") + game.name + (selected ? " from favorites" : " to favorites"));
+  function updateHeroImage(game) {
+    var backdrop = $("[data-hero-backdrop]");
+    var url = state.imageUrls.get(game.id);
+    backdrop.style.backgroundImage = url ? 'url("' + url.replace(/"/g, "%22") + '")' : "linear-gradient(135deg, #28506d, #151d28 68%)";
   }
 
-  function buildCategories() {
-    var categories = new Map();
-    catalog.forEach(function (game) {
-      if (!categories.has(game.categoryKey)) categories.set(game.categoryKey, { key: game.categoryKey, label: game.category, count: 0 });
-      categories.get(game.categoryKey).count += 1;
-    });
-    var items = Array.from(categories.values()).sort(function (left, right) {
-      return right.count - left.count || left.label.localeCompare(right.label);
-    });
-    var host = $("[data-category-chips]");
-    var fragment = document.createDocumentFragment();
-    [{ key: "all", label: "All", count: catalog.length }].concat(items).forEach(function (item) {
-      var button = document.createElement("button");
-      button.type = "button";
-      button.className = "category-chip";
-      button.dataset.category = item.key;
-      button.classList.toggle("is-active", item.key === category);
-      button.setAttribute("aria-pressed", item.key === category ? "true" : "false");
-      button.textContent = item.label;
-      button.title = item.count.toLocaleString() + " games";
-      fragment.appendChild(button);
-    });
-    host.replaceChildren(fragment);
+  function updateSelectedGame() {
+    var game = state.selected;
+    $("[data-welcome]").hidden = Boolean(game);
+    $("[data-selected-game]").hidden = !game;
+    if (!game) return;
+
+    var category = formatCategory(game.category);
+    var stats = getGameStats(game);
+    $("[data-game-title]").textContent = game.name;
+    $("[data-game-category]").textContent = category;
+    $("[data-last-played]").textContent = formatLastPlayed(stats.lastPlayed);
+    $("[data-play-time]").textContent = formatPlayTime(stats.seconds);
+    $("[data-about-title]").textContent = game.name + " is ready";
+    $("[data-about-copy]").textContent = "Launch this title directly through the Fern game service. NEO Games keeps your favorites, recent history, and play time on this device.";
+    $("[data-meta-category]").textContent = category;
+    $("[data-meta-id]").textContent = game.id;
+    $("[data-game-source]").textContent = providerLabel;
+    updateHeroImage(game);
+    requestImage(game);
+
+    var favorite = $("[data-favorite]");
+    var selected = state.favorites.has(game.id);
+    favorite.classList.toggle("is-active", selected);
+    favorite.textContent = selected ? "♥" : "♡";
+    favorite.title = selected ? "Remove from favorites" : "Add to favorites";
+    favorite.setAttribute("aria-label", favorite.title);
+
+    var recent = state.recent.find(function (entry) { return String(entry.id) === game.id; });
+    $("[data-recent-row]").hidden = !recent;
+    if (recent) $("[data-recent-copy]").textContent = "Last launched " + formatLastPlayed(recent.timestamp).toLowerCase();
   }
 
-  function enableCategoryPanning(host) {
-    if (!host || host.dataset.neoPanningReady === "true") return;
-    host.dataset.neoPanningReady = "true";
-    var pointerId = null;
-    var captureTarget = null;
-    var startX = 0;
-    var startScrollLeft = 0;
-    var dragged = false;
-    var suppressClick = false;
+  function selectGame(game, options) {
+    if (!game) return;
+    options = options || {};
+    state.selected = game;
+    if (!options.fromHistory) {
+      state.history = state.history.slice(0, state.historyIndex + 1);
+      if (!state.history.length || state.history[state.history.length - 1] !== game.id) state.history.push(game.id);
+      state.historyIndex = state.history.length - 1;
+    }
+    $("[data-history-back]").disabled = state.historyIndex <= 0;
+    $("[data-history-forward]").disabled = state.historyIndex < 0 || state.historyIndex >= state.history.length - 1;
+    $("[data-home].library-home").classList.remove("is-active");
+    renderLists();
+    updateSelectedGame();
+  }
 
-    host.addEventListener("wheel", function (event) {
-      if (host.scrollWidth <= host.clientWidth) return;
-      var rawDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-      if (!rawDelta) return;
-      var scale = event.deltaMode === 1 ? 18 : event.deltaMode === 2 ? host.clientWidth : 1;
-      var before = host.scrollLeft;
-      host.scrollLeft += rawDelta * scale;
-      if (host.scrollLeft !== before) event.preventDefault();
-    }, { passive: false });
-
-    host.addEventListener("pointerdown", function (event) {
-      if (event.pointerType === "touch" || event.button !== 0) return;
-      pointerId = event.pointerId;
-      captureTarget = event.target;
-      startX = event.clientX;
-      startScrollLeft = host.scrollLeft;
-      dragged = false;
-      host.classList.add("is-grabbing");
-      if (captureTarget && captureTarget.setPointerCapture) captureTarget.setPointerCapture(pointerId);
-    });
-
-    host.addEventListener("pointermove", function (event) {
-      if (event.pointerId !== pointerId) return;
-      var distance = startX - event.clientX;
-      if (!dragged && Math.abs(distance) > 4) dragged = true;
-      if (!dragged) return;
-      event.preventDefault();
-      host.scrollLeft = startScrollLeft + distance;
-    }, { passive: false });
-
-    function finishPan(event) {
-      if (event.pointerId !== pointerId) return;
-      if (dragged) {
-        suppressClick = true;
-        window.setTimeout(function () { suppressClick = false; }, 0);
+  async function fetchGames(page, query, append) {
+    if (state.loading || !window.Lumin || typeof window.Lumin.getGames !== "function") return;
+    state.loading = true;
+    state.failed = false;
+    var token = ++state.requestToken;
+    renderLists();
+    try {
+      var options = { page: page, limit: pageSize };
+      if (query) options.q = query;
+      var response = await window.Lumin.getGames(options);
+      if (token !== state.requestToken) return;
+      var rows = Array.isArray(response && response.games) ? response.games : [];
+      var games = rows.map(normalizeGame);
+      games.forEach(function (game) { state.gameMap.set(game.id, game); });
+      if (append) {
+        var known = new Set(state.games.map(function (game) { return game.id; }));
+        games.forEach(function (game) { if (!known.has(game.id)) state.games.push(game); });
+      } else {
+        state.games = games;
       }
-      if (captureTarget && captureTarget.releasePointerCapture && captureTarget.hasPointerCapture && captureTarget.hasPointerCapture(pointerId)) {
-        captureTarget.releasePointerCapture(pointerId);
+      state.page = Number(response && response.page) || page;
+      state.total = Number(response && response.total) || state.games.length;
+      state.pages = Number(response && response.pages) || Math.max(1, Math.ceil(state.total / pageSize));
+      state.query = query;
+      $("[data-count]").textContent = state.total.toLocaleString() + " GAMES";
+      setProviderStatus(state.total.toLocaleString() + " games available from Fern", "online");
+      if (!state.selected && state.games.length) selectGame(state.games[0]);
+      else renderLists();
+      loadImages(games);
+    } catch (error) {
+      if (token !== state.requestToken) return;
+      state.failed = true;
+      setProviderStatus("Fern is currently unavailable", "error");
+      $("[data-list-state]").textContent = cleanText(error && error.message, "The Fern catalog could not load.");
+      $("[data-list-state]").hidden = false;
+      if (!state.games.length) {
+        $("[data-welcome] p").textContent = "The Fern game library could not be reached. Check the connection and try again.";
+        $("[data-retry]").hidden = false;
       }
-      pointerId = null;
-      captureTarget = null;
-      dragged = false;
-      host.classList.remove("is-grabbing");
-    }
-
-    host.addEventListener("pointerup", finishPan);
-    host.addEventListener("pointercancel", finishPan);
-    host.addEventListener("click", function (event) {
-      if (!suppressClick) return;
-      suppressClick = false;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }, true);
-  }
-
-  function sortGames(items) {
-    return items.slice().sort(function (left, right) {
-      if (sortMode === "title-desc") return right.name.localeCompare(left.name, undefined, { numeric: true, sensitivity: "base" });
-      if (sortMode === "source-asc") {
-        return left.category.localeCompare(right.category, undefined, { sensitivity: "base" }) || left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
+    } finally {
+      if (token === state.requestToken) {
+        state.loading = false;
+        renderLists();
       }
-      if (sortMode === "source-size") {
-        return (sourceCounts.get(right.categoryKey) || 0) - (sourceCounts.get(left.categoryKey) || 0) || left.category.localeCompare(right.category) || left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
-      }
-      return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
-    });
-  }
-
-  function filteredGames() {
-    var items;
-    if (mode === "recent") {
-      items = recent.map(function (id) { return gamesById.get(id); }).filter(Boolean);
-    } else {
-      items = mode === "home" ? discoverCatalog : catalog;
     }
-    if (mode === "favorites") items = items.filter(function (game) { return favorites.has(game.id); });
-    if (category !== "all") items = items.filter(function (game) { return game.categoryKey === category; });
-    if (query) {
-      var terms = normalize(query).split(" ").filter(Boolean);
-      items = items.filter(function (game) {
-        return terms.every(function (term) { return game.search.indexOf(term) >= 0; });
-      });
+  }
+
+  async function boot() {
+    state.loading = true;
+    renderLists();
+    try {
+      await initializeProvider();
+      state.ready = true;
+      state.loading = false;
+      $("[data-shell]").setAttribute("aria-busy", "false");
+      await fetchGames(1, "", false);
+    } catch (error) {
+      state.loading = false;
+      state.failed = true;
+      $("[data-shell]").setAttribute("aria-busy", "false");
+      $("[data-welcome] p").textContent = cleanText(error && error.message, "The Fern game library could not initialize.");
+      $("[data-retry]").hidden = false;
+      setProviderStatus("Fern connection failed", "error");
+      renderLists();
     }
-    return sortGames(items);
   }
 
-  function updateHeading() {
-    var label = "FEATURED";
-    var title = "Featured games";
-    if (mode === "all") { label = "GAME LIBRARY"; title = "All games"; }
-    if (mode === "favorites") { label = "YOUR LIBRARY"; title = "Favorite games"; }
-    if (mode === "recent") { label = "PLAY AGAIN"; title = "Recently played"; }
-    if (category !== "all") {
-      var chip = $$("[data-category]").find(function (button) { return button.dataset.category === category; });
-      label = "SOURCE";
-      title = chip ? chip.textContent : titleCase(category);
-    }
-    if (query) { label = "SEARCH"; title = 'Results for "' + query + '"'; }
-    $("[data-library-label]").textContent = label;
-    $("[data-library-title]").textContent = title;
-    $("[data-results]").textContent = matches.length.toLocaleString() + (matches.length === 1 ? " game" : " games");
+  function toggleFavorite() {
+    var game = state.selected;
+    if (!game) return;
+    if (state.favorites.has(game.id)) state.favorites.delete(game.id); else state.favorites.add(game.id);
+    writeStore(favoritesKey, Array.from(state.favorites));
+    renderLists();
+    updateSelectedGame();
   }
 
-  function renderNext() {
-    if (visible >= matches.length) return;
-    var end = Math.min(visible + chunkSize, matches.length);
-    var fragment = document.createDocumentFragment();
-    for (var index = visible; index < end; index += 1) fragment.appendChild(createCard(matches[index]));
-    $("[data-grid]").appendChild(fragment);
-    visible = end;
-    $("[data-more]").hidden = visible >= matches.length;
-  }
-
-  function emptyMessage() {
-    if (mode === "favorites") return "No favorites yet. Select the heart on any game to add one.";
-    if (mode === "recent") return "Games you play will appear here.";
-    return "No games match this search and category.";
-  }
-
-  function renderLibrary() {
-    matches = filteredGames();
-    visible = 0;
-    $("[data-grid]").replaceChildren();
-    $("[data-state]").hidden = matches.length > 0;
-    $("[data-state]").textContent = matches.length ? "" : emptyMessage();
-    updateHeading();
-    renderNext();
-  }
-
-  function setMode(next) {
-    mode = next || "home";
-    query = "";
-    category = "all";
-    $("[data-search]").value = "";
-    $$("[data-mode]").forEach(function (button) {
-      button.classList.toggle("is-active", button.dataset.mode === mode);
-    });
-    $$("[data-category]").forEach(function (button) {
-      button.classList.toggle("is-active", button.dataset.category === category);
-      button.setAttribute("aria-pressed", button.dataset.category === category ? "true" : "false");
-    });
-    renderLibrary();
-    window.scrollTo({ top: 0, behavior: "auto" });
-  }
-
-  function setCategory(next) {
-    category = next || "all";
-    $$("[data-category]").forEach(function (button) {
-      var selected = button.dataset.category === category;
-      button.classList.toggle("is-active", selected);
-      button.setAttribute("aria-pressed", selected ? "true" : "false");
-    });
-    renderLibrary();
-  }
-
-  function isEmbedded() {
-    try { return window.parent && window.parent !== window; } catch (_error) { return false; }
+  async function resolveLaunchUrl(game) {
+    if (state.launchUrls.has(game.id)) return state.launchUrls.get(game.id);
+    if (!window.Lumin || typeof window.Lumin.getGameUrl !== "function") throw new Error("Fern cannot launch this game right now");
+    var response = await window.Lumin.getGameUrl(game.id);
+    var url = safeUrl(typeof response === "string" ? response : response && response.url);
+    if (!url) throw new Error("Fern returned an invalid game URL");
+    state.launchUrls.set(game.id, url);
+    return url;
   }
 
   function resetGameFrame(frame) {
@@ -434,78 +442,125 @@
     frame.setAttribute("src", "about:blank");
   }
 
-  function requestDirectEmbed(frame, target) {
-    var route = directGameUrl(target);
-    if (!route) return false;
-    frame.dataset.neoGameSource = route;
-    frame.setAttribute("src", route);
-    return true;
-  }
-
-  function showFrameMessage(message, failed) {
+  function showFrameMessage(title, detail, failed) {
     var status = $("[data-frame-status]");
     status.classList.remove("is-ready");
     status.classList.toggle("is-error", Boolean(failed));
-    status.textContent = message;
+    $("strong", status).textContent = title;
+    $("small", status).textContent = detail || "";
   }
 
-  function openGame(game) {
+  function rememberLaunch(game) {
+    var now = Date.now();
+    state.recent = [{ id: game.id, name: game.name, timestamp: now }].concat(state.recent.filter(function (entry) { return String(entry.id) !== game.id; })).slice(0, 48);
+    writeStore(recentKey, state.recent);
+    var stats = getGameStats(game);
+    state.stats[game.id] = { seconds: Number(stats.seconds) || 0, lastPlayed: now };
+    writeStore(statsKey, state.stats);
+  }
+
+  async function openGame(game) {
     if (!game) return;
-    activeGame = game;
-    var frame = $("[data-game-frame]");
-    resetGameFrame(frame);
-    $("[data-player-title]").textContent = game.name;
-    var shortcutButton = $("[data-player-pin]");
-    shortcutButton.disabled = false;
-    shortcutButton.textContent = "Add to taskbar";
-    shortcutButton.title = "Also adds this game to the home screen";
-    $("[data-player]").hidden = false;
-    document.documentElement.classList.add("is-playing");
-    showFrameMessage("Loading " + game.name + " directly…", false);
-    if (!requestDirectEmbed(frame, game.url)) {
-      showFrameMessage("This title is not available from the direct game CDN.", true);
-      return;
+    var playButton = $("[data-play]");
+    playButton.disabled = true;
+    $("[data-game-status]").textContent = "Requesting launch URL…";
+    try {
+      var launchUrl = await resolveLaunchUrl(game);
+      state.activeGame = game;
+      state.activeLaunchUrl = launchUrl;
+      state.sessionStartedAt = Date.now();
+      rememberLaunch(game);
+      var frame = $("[data-game-frame]");
+      resetGameFrame(frame);
+      $("[data-player-title]").textContent = game.name;
+      var shortcutButton = $("[data-player-pin]");
+      shortcutButton.disabled = false;
+      shortcutButton.textContent = "Add to taskbar";
+      $("[data-player]").hidden = false;
+      document.documentElement.classList.add("is-playing");
+      showFrameMessage("Launching " + game.name, "Loading directly from Fern…", false);
+      frame.dataset.neoGameSource = launchUrl;
+      frame.setAttribute("src", launchUrl);
+      frameTimer = window.setTimeout(function () {
+        if (frame.dataset.neoGameReady !== "true") showFrameMessage("Still loading " + game.name, "The game service is taking longer than usual.", false);
+      }, 12000);
+    } catch (error) {
+      showToast(cleanText(error && error.message, "This game could not be launched."));
+      $("[data-game-status]").textContent = "Launch unavailable";
+    } finally {
+      playButton.disabled = false;
     }
-    remember(game);
-    frameTimer = window.setTimeout(function () {
-      if (frame.dataset.neoGameReady !== "true") showFrameMessage("Still loading the game CDN…", false);
-    }, 10000);
+  }
+
+  function recordSession() {
+    if (!state.activeGame || !state.sessionStartedAt) return;
+    var elapsed = Math.max(1, Math.round((Date.now() - state.sessionStartedAt) / 1000));
+    var stats = getGameStats(state.activeGame);
+    state.stats[state.activeGame.id] = { seconds: (Number(stats.seconds) || 0) + elapsed, lastPlayed: Number(stats.lastPlayed) || Date.now() };
+    writeStore(statsKey, state.stats);
+    state.sessionStartedAt = 0;
   }
 
   function closeGame() {
-    var frame = $("[data-game-frame]");
-    resetGameFrame(frame);
+    recordSession();
+    resetGameFrame($("[data-game-frame]"));
     clearTimeout(shortcutTimer);
     shortcutRequestId = "";
-    activeGame = null;
+    try { if (window.Lumin && typeof window.Lumin.endGame === "function") window.Lumin.endGame(); } catch (_error) {}
+    var selected = state.activeGame;
+    state.activeGame = null;
+    state.activeLaunchUrl = "";
     $("[data-player]").hidden = true;
     document.documentElement.classList.remove("is-playing");
+    if (selected) selectGame(selected, { fromHistory: true });
   }
 
-  function addActiveGameToTaskbar() {
-    if (!activeGame) return;
-    var button = $("[data-player-pin]");
+  function refreshGame() {
+    if (!state.activeLaunchUrl) return;
+    var frame = $("[data-game-frame]");
+    var url = state.activeLaunchUrl;
+    resetGameFrame(frame);
+    showFrameMessage("Reloading " + state.activeGame.name, "Loading directly from Fern…", false);
+    window.setTimeout(function () {
+      frame.dataset.neoGameSource = url;
+      frame.setAttribute("src", url);
+    }, 40);
+  }
+
+  function isEmbedded() {
+    try { return window.parent && window.parent !== window; } catch (_error) { return true; }
+  }
+
+  async function addGameToTaskbar(game) {
+    game = game || state.activeGame || state.selected;
+    if (!game) return;
     if (!isEmbedded()) {
-      button.textContent = "Add to taskbar";
-      button.title = "Open Games inside NEO OS to add this shortcut";
+      showToast("Open NEO Games inside NEO OS to add a taskbar shortcut.");
       return;
     }
-    clearTimeout(shortcutTimer);
-    shortcutRequestId = "game-shortcut-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-    button.disabled = true;
-    button.textContent = "Adding…";
-    window.parent.postMessage({
-      type: "neo-shell:add-game-shortcut",
-      id: shortcutRequestId,
-      game: { title: activeGame.name, url: activeGame.url, icon: activeGame.img, mode: "direct-game" }
-    }, "*");
-    shortcutTimer = window.setTimeout(function () {
-      if (!shortcutRequestId) return;
-      shortcutRequestId = "";
+    var button = state.activeGame ? $("[data-player-pin]") : $("[data-detail-pin]");
+    try {
+      var launchUrl = await resolveLaunchUrl(game);
+      clearTimeout(shortcutTimer);
+      shortcutRequestId = "game-shortcut-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      button.disabled = true;
+      if (button === $("[data-player-pin]")) button.textContent = "Adding…";
+      window.parent.postMessage({
+        type: "neo-shell:add-game-shortcut",
+        id: shortcutRequestId,
+        game: { title: game.name, url: launchUrl, icon: state.imageUrls.get(game.id) || "", mode: "direct-game" }
+      }, shellOrigin);
+      shortcutTimer = window.setTimeout(function () {
+        if (!shortcutRequestId) return;
+        shortcutRequestId = "";
+        button.disabled = false;
+        if (button === $("[data-player-pin]")) button.textContent = "Try again";
+        showToast("NEO OS did not answer. Try adding the shortcut again.");
+      }, 8000);
+    } catch (error) {
       button.disabled = false;
-      button.textContent = "Try again";
-      button.title = "NEO OS did not answer. Select to retry.";
-    }, 8000);
+      showToast(cleanText(error && error.message, "This shortcut could not be created."));
+    }
   }
 
   function handleShellShortcutResult(event) {
@@ -514,192 +569,117 @@
     if (!data || data.type !== "neo-shell:add-game-shortcut-result" || data.id !== shortcutRequestId) return;
     clearTimeout(shortcutTimer);
     shortcutRequestId = "";
-    var button = $("[data-player-pin]");
-    if (data.ok) {
-      button.disabled = true;
-      button.textContent = "Added";
-      button.title = "Added to the taskbar and home screen";
-      return;
-    }
+    var button = state.activeGame ? $("[data-player-pin]") : $("[data-detail-pin]");
     button.disabled = false;
-    button.textContent = "Try again";
-    button.title = String(data.error || "This game could not be added.");
-  }
-
-  function observeFrameState() {
-    var frame = $("[data-game-frame]");
-    frame.addEventListener("load", function () {
-      if (!frame.dataset.neoGameSource || frame.getAttribute("src") === "about:blank") return;
-      clearTimeout(frameTimer);
-      frame.dataset.neoGameReady = "true";
-      $("[data-frame-status]").classList.add("is-ready");
-    });
-  }
-
-  function parseCatalogScript(source) {
-    var marker = source.indexOf("window.SCRAPE_GAMES");
-    var start = source.indexOf("[", marker);
-    var end = source.lastIndexOf("];");
-    if (marker < 0 || start < 0 || end <= start) throw new Error("Invalid master game list");
-    var rows = JSON.parse(source.slice(start, end + 1).replace(/,\s*\]$/, "\n]"));
-    if (!Array.isArray(rows)) throw new Error("Invalid master game list");
-    return rows;
-  }
-
-  async function fetchCatalogRows(urls) {
-    var lastError = null;
-    for (var index = 0; index < urls.length; index += 1) {
-      var controller = new AbortController();
-      var timer = window.setTimeout(function () { controller.abort(); }, 15000);
-      try {
-        var response = await fetch(urls[index], {
-          credentials: "omit",
-          cache: "force-cache",
-          mode: "cors",
-          signal: controller.signal
-        });
-        if (!response.ok) throw new Error("The game catalogue returned " + response.status);
-        return parseCatalogScript(await response.text());
-      } catch (error) {
-        lastError = error;
-      } finally {
-        clearTimeout(timer);
-      }
+    if (data.ok) {
+      if (button === $("[data-player-pin]")) button.textContent = "Added";
+      showToast(gameTitleForShortcut() + " was added to the taskbar and home screen.");
+    } else {
+      if (button === $("[data-player-pin]")) button.textContent = "Try again";
+      showToast(cleanText(data.error, "The shortcut could not be added."));
     }
-    throw lastError || new Error("The game catalogue is unavailable");
   }
 
-  async function loadCatalog() {
-    var rows = await fetchCatalogRows(CATALOG_URLS);
-    var seen = new Set();
-    catalog = rows.map(function (entry, index) { return normalizeGame(entry, index); }).filter(function (game) {
-      if (!game || seen.has(game.id)) return false;
-      seen.add(game.id);
-      return true;
-    });
-    if (!catalog.length) throw new Error("The master game catalogue is empty");
-    gamesById = new Map(catalog.map(function (game) { return [game.id, game]; }));
-    sourceCounts = new Map();
-    catalog.forEach(function (game) { sourceCounts.set(game.categoryKey, (sourceCounts.get(game.categoryKey) || 0) + 1); });
-    discoverCatalog = catalog.filter(function (game) { return game.featured; }).concat(catalog.filter(function (game) { return !game.featured; }));
-    favorites = new Set(Array.from(favorites).filter(function (id) { return gamesById.has(id); }));
-    recent = recent.filter(function (id) { return gamesById.has(id); });
-    $("[data-count]").textContent = catalog.length.toLocaleString() + " GAMES";
-    buildCategories();
-    renderLibrary();
+  function gameTitleForShortcut() {
+    return (state.activeGame || state.selected || { name: "Game" }).name;
   }
 
-  function registerWebTools() {
-    var context = document.modelContext;
-    if (!context || typeof context.registerTool !== "function") return;
-    var lifecycle = new AbortController();
-    function register(tool) {
-      try { Promise.resolve(context.registerTool(tool, { signal: lifecycle.signal })).catch(function () {}); } catch (_error) {}
-    }
-    register({
-      name: "search_neo_games",
-      title: "Search NEO Games",
-      description: "Search the visible master game catalogue by title or source.",
-      inputSchema: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 80 } }, required: ["query"], additionalProperties: false },
-      annotations: { readOnlyHint: true, untrustedContentHint: false },
-      execute: function (input) {
-        if (!input || typeof input.query !== "string" || !input.query.trim()) throw new TypeError("query must be a non-empty string");
-        window.NEO_GAMES.search(input.query.trim());
-        return { query: input.query.trim(), results: matches.length };
-      }
-    });
-    register({
-      name: "open_neo_game",
-      title: "Open NEO Game",
-      description: "Open one game directly from the NEO game CDN.",
-      inputSchema: { type: "object", properties: { id: { type: "string", minLength: 1, maxLength: 160 } }, required: ["id"], additionalProperties: false },
-      annotations: { readOnlyHint: false, untrustedContentHint: false },
-      execute: function (input) {
-        if (!input || typeof input.id !== "string") throw new TypeError("id must be a string");
-        var game = gamesById.get(input.id);
-        if (!game) throw new Error("Game not found");
-        openGame(game);
-        return { id: game.id, title: game.name, status: "opening-directly" };
-      }
-    });
-    window.addEventListener("pagehide", function () { lifecycle.abort(); }, { once: true });
+  function setGroupExpanded(button, expanded) {
+    button.setAttribute("aria-expanded", expanded ? "true" : "false");
   }
 
-  function init() {
-    $$("[data-mode]").forEach(function (button) {
-      button.addEventListener("click", function () { setMode(button.dataset.mode); });
-    });
-    var categoryChips = $("[data-category-chips]");
-    enableCategoryPanning(categoryChips);
-    categoryChips.addEventListener("click", function (event) {
-      var button = event.target.closest("[data-category]");
-      if (button) setCategory(button.dataset.category);
-    });
-    $("[data-grid]").addEventListener("click", function (event) {
-      var favoriteButton = event.target.closest("[data-favorite-game]");
-      if (favoriteButton) {
-        var favoriteGame = gamesById.get(favoriteButton.dataset.favoriteGame);
-        if (!favoriteGame) return;
-        if (favorites.has(favoriteGame.id)) favorites.delete(favoriteGame.id); else favorites.add(favoriteGame.id);
-        saveFavorites();
-        updateFavoriteButton(favoriteButton, favoriteGame);
-        if (mode === "favorites") renderLibrary();
+  function goHome() {
+    $("[data-home].library-home").classList.add("is-active");
+    if (state.games.length) selectGame(state.games[0]);
+  }
+
+  function navigateHistory(direction) {
+    var next = state.historyIndex + direction;
+    if (next < 0 || next >= state.history.length) return;
+    state.historyIndex = next;
+    var game = state.gameMap.get(state.history[next]);
+    if (game) selectGame(game, { fromHistory: true });
+  }
+
+  function bindEvents() {
+    document.addEventListener("click", function (event) {
+      var gameButton = event.target.closest("[data-open-game]");
+      if (gameButton) {
+        selectGame(state.gameMap.get(gameButton.dataset.openGame));
         return;
       }
-      var launch = event.target.closest("[data-open-game]");
-      if (launch) openGame(gamesById.get(launch.dataset.openGame));
+      if (event.target.closest("[data-home]")) { goHome(); return; }
+      if (event.target.closest("[data-play]")) { openGame(state.selected); return; }
+      if (event.target.closest("[data-favorite]")) { toggleFavorite(); return; }
+      if (event.target.closest("[data-detail-pin]")) { addGameToTaskbar(state.selected); return; }
+      if (event.target.closest("[data-load-more]")) { fetchGames(state.page + 1, state.query, true); return; }
+      if (event.target.closest("[data-retry]")) { location.reload(); return; }
+      if (event.target.closest("[data-history-back]")) { navigateHistory(-1); return; }
+      if (event.target.closest("[data-history-forward]")) { navigateHistory(1); return; }
+      var favoriteToggle = event.target.closest("[data-toggle-favorites]");
+      if (favoriteToggle) { setGroupExpanded(favoriteToggle, favoriteToggle.getAttribute("aria-expanded") !== "true"); return; }
+      var libraryToggle = event.target.closest("[data-toggle-library]");
+      if (libraryToggle) { setGroupExpanded(libraryToggle, libraryToggle.getAttribute("aria-expanded") !== "true"); return; }
+      var menu = event.target.closest("[data-menu]");
+      if (menu) showToast(menu.dataset.menu === "help" ? "Choose a game and select Play. Favorites and play time stay on this device." : "The focused NEO Games library view is already active.");
     });
 
-    var searchTimer = 0;
-    $("[data-search]").addEventListener("input", function () {
-      query = this.value.trim();
+    $("[data-search]").addEventListener("input", function (event) {
       clearTimeout(searchTimer);
-      searchTimer = window.setTimeout(renderLibrary, 100);
+      var query = cleanText(event.target.value, "");
+      searchTimer = window.setTimeout(function () {
+        state.loading = false;
+        fetchGames(1, query, false);
+      }, searchDelay);
     });
-    $("[data-sort]").addEventListener("change", function () {
-      sortMode = this.value || "title-asc";
-      renderLibrary();
-    });
-    $("[data-more]").addEventListener("click", renderNext);
-    if ("IntersectionObserver" in window) {
-      loadObserver = new IntersectionObserver(function (entries) {
-        if (entries.some(function (entry) { return entry.isIntersecting; })) renderNext();
-      }, { rootMargin: "500px 0px" });
-      loadObserver.observe($("[data-sentinel]"));
-    }
+
+    $("[data-library-scroll]").addEventListener("scroll", function (event) {
+      var host = event.currentTarget;
+      if (!state.loading && state.page < state.pages && host.scrollTop + host.clientHeight >= host.scrollHeight - 160) fetchGames(state.page + 1, state.query, true);
+    }, { passive: true });
 
     $("[data-player-close]").addEventListener("click", closeGame);
-    $("[data-player-pin]").addEventListener("click", addActiveGameToTaskbar);
+    $$("[data-player-close]").slice(1).forEach(function (button) { button.addEventListener("click", closeGame); });
+    $("[data-player-refresh]").addEventListener("click", refreshGame);
+    $("[data-player-pin]").addEventListener("click", function () { addGameToTaskbar(state.activeGame); });
     $("[data-player-fullscreen]").addEventListener("click", function () {
       var player = $("[data-player]");
       if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
       else player.requestFullscreen().catch(function () {});
     });
-    window.addEventListener("keydown", function (event) {
+
+    $("[data-game-frame]").addEventListener("load", function (event) {
+      var frame = event.currentTarget;
+      if (!frame.dataset.neoGameSource || frame.getAttribute("src") === "about:blank") return;
+      clearTimeout(frameTimer);
+      frame.dataset.neoGameReady = "true";
+      $("[data-frame-status]").classList.add("is-ready");
+    });
+
+    document.addEventListener("keydown", function (event) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        $("[data-search]").focus();
+        $("[data-search]").select();
+      }
       if (event.key === "Escape" && !$("[data-player]").hidden && !document.fullscreenElement) closeGame();
     });
     window.addEventListener("message", handleShellShortcutResult);
-    observeFrameState();
-
-    loadCatalog().catch(function () {
-      $("[data-count]").textContent = "CATALOGUE UNAVAILABLE";
-      $("[data-results]").textContent = "Master list connection failed";
-      $("[data-state]").hidden = false;
-      $("[data-state]").textContent = "The master game catalogue could not load. Check the connection and try again.";
-    });
-
-    window.NEO_GAMES = Object.freeze({
-      search: function (value) {
-        query = String(value || "").trim();
-        $("[data-search]").value = query;
-        renderLibrary();
-      },
-      open: function (id) { openGame(gamesById.get(String(id || ""))); },
-      favorites: function () { setMode("favorites"); }
-    });
-    registerWebTools();
+    window.addEventListener("beforeunload", recordSession);
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
-  else init();
+  window.NEO_GAMES = {
+    search: function (query) {
+      var value = cleanText(query, "");
+      $("[data-search]").value = value;
+      state.loading = false;
+      return fetchGames(1, value, false);
+    },
+    favorites: function () { return Array.from(state.favorites); },
+    selected: function () { return state.selected ? { id: state.selected.id, name: state.selected.name } : null; },
+    reload: function () { return fetchGames(1, state.query, false); }
+  };
+
+  bindEvents();
+  boot();
 })();
