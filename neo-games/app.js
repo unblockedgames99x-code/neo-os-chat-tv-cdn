@@ -311,6 +311,7 @@
     var stats = getGameStats(game);
     $("[data-game-title]").textContent = game.name;
     $("[data-game-category]").textContent = category;
+    $("[data-game-status]").textContent = "✓ Ready to play";
     $("[data-last-played]").textContent = formatLastPlayed(stats.lastPlayed);
     $("[data-play-time]").textContent = formatPlayTime(stats.seconds);
     $("[data-about-title]").textContent = game.name + " is ready";
@@ -589,8 +590,8 @@
   }
 
   function goHome() {
-    $("[data-home].library-home").classList.add("is-active");
     if (state.games.length) selectGame(state.games[0]);
+    $("[data-home].library-home").classList.add("is-active");
   }
 
   function navigateHistory(direction) {
