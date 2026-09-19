@@ -41,17 +41,18 @@
       var pendingFrames = new Map();
       var nextFrameId = 1;
       var minimumFrameTime = 1000 / 60;
+      var lastDeliveredFrameTime = 0;
 
       // The old Unity player advances Snow Rider's controls too aggressively
       // on high-refresh displays. Cap only this game's animation callbacks.
       window.requestAnimationFrame = function (callback) {
         var frameId = nextFrameId++;
-        var previousTime = 0;
 
         function tick(time) {
           if (!pendingFrames.has(frameId)) return;
-          if (!previousTime || time - previousTime >= minimumFrameTime - 0.75) {
+          if (!lastDeliveredFrameTime || time - lastDeliveredFrameTime >= minimumFrameTime - 0.75) {
             pendingFrames.delete(frameId);
+            lastDeliveredFrameTime = time;
             callback(time);
             return;
           }
