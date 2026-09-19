@@ -627,6 +627,95 @@ input:focus-visible {
 .client-footer button:hover { color: #d6d7d8; }
 .client-footer > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.local-game-dialog {
+  width: min(640px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid #405366;
+  border-radius: 3px;
+  background: #202a35;
+  box-shadow: 0 24px 80px rgba(0,0,0,.72);
+  color: #d6d7d8;
+}
+
+.local-game-dialog::backdrop { background: rgba(5,9,13,.78); backdrop-filter: blur(3px); }
+.local-game-dialog form { min-width: 0; }
+.local-game-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 22px 17px;
+  background: linear-gradient(180deg, #273645, #202a35);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.dialog-kicker { color: #66c0f4; font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.local-game-dialog h2 { margin: 4px 0 0; color: #fff; font-size: 22px; font-weight: 500; }
+.dialog-close { width: 28px; height: 28px; background: transparent; color: #8d9aa6; cursor: pointer; font-size: 24px; line-height: 1; }
+.dialog-close:hover { color: #fff; }
+
+.local-game-form-grid {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 22px;
+  padding: 22px;
+}
+.local-cover-picker { display: grid; align-content: start; gap: 10px; }
+.local-cover-preview {
+  display: grid;
+  place-items: center;
+  width: 150px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px dashed #55687b;
+  border-radius: 3px;
+  background: linear-gradient(145deg, #30475b, #17222d);
+  color: #7890a5;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: .12em;
+}
+.local-cover-preview img { width: 100%; height: 100%; object-fit: cover; }
+.file-button {
+  display: grid;
+  place-items: center;
+  height: 32px;
+  border-radius: 2px;
+  background: #334b60;
+  color: #c7d5e0;
+  cursor: pointer;
+  font-size: 11px;
+}
+.file-button:hover { background: #40617d; color: #fff; }
+.file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.local-fields { display: grid; gap: 14px; min-width: 0; }
+.local-fields label { display: grid; gap: 6px; min-width: 0; }
+.local-fields label > span { color: #b8c4ce; font-size: 11px; font-weight: 600; }
+.local-fields em { color: #71808e; font-style: normal; font-weight: 400; }
+.local-fields input[type="text"],
+.local-fields input[type="file"] {
+  min-width: 0;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid #3b4c5c;
+  border-radius: 2px;
+  background: #141c25;
+  color: #e0e7ec;
+  font-size: 12px;
+}
+.local-fields input[type="file"] { padding: 6px; color: #9dabb7; }
+.local-fields input[type="file"]::file-selector-button { margin-right: 9px; padding: 5px 9px; border: 0; border-radius: 2px; background: #334b60; color: #dce7ef; cursor: pointer; }
+.local-fields small { color: #74818c; font-size: 9px; line-height: 1.4; }
+.local-form-error { margin: -6px 22px 14px; padding: 9px 11px; border-left: 3px solid #d75454; background: rgba(119,34,34,.2); color: #efb4b4; font-size: 11px; }
+.local-game-dialog > form > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 22px; background: #18212a; border-top: 1px solid rgba(255,255,255,.06); }
+.local-game-dialog > form > footer button { min-width: 94px; height: 34px; padding: 0 14px; border-radius: 2px; cursor: pointer; font-size: 11px; }
+.dialog-secondary { background: #33414e; color: #b9c5ce; }
+.dialog-primary { background: linear-gradient(90deg, #75b022, #5a971b); color: #edffdf; font-weight: 700; }
+.dialog-primary:disabled { opacity: .55; cursor: wait; }
+
 .player {
   position: fixed;
   inset: 0;
@@ -745,6 +834,9 @@ html.is-playing body { overflow: hidden; }
   .player-actions { justify-content: flex-end; }
   .player-actions [data-player-refresh],
   .player-actions [data-player-pin] { display: none; }
+  .local-game-form-grid { grid-template-columns: 1fr; }
+  .local-cover-picker { grid-template-columns: 108px minmax(0, 1fr); align-items: end; }
+  .local-cover-preview { width: 108px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

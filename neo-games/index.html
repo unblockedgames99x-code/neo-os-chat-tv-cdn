@@ -9,9 +9,9 @@
   <title>Steam</title>
   <script src="../neo-app-theme.js?v=20260907-theme-system-v2"></script>
   <link rel="stylesheet" href="../neo-fonts.css?v=20260912-native-fast-v1">
-  <link rel="stylesheet" href="./app.css?v=20260918-steam-library-v1">
+  <link rel="stylesheet" href="./app.css?v=20260919-local-games-v1">
   <script src="./config.js?v=20260918-fern-v1"></script>
-  <script defer src="./app.js?v=20260919-snow-rider-jump-fix-v1"></script>
+  <script defer src="./app.js?v=20260919-local-games-v1"></script>
 </head>
 <body>
   <div class="steam-shell" data-shell aria-busy="true">
@@ -54,6 +54,13 @@
         </div>
 
         <div class="library-scroll" data-library-scroll>
+          <section class="game-group" data-local-group hidden>
+            <button class="group-heading" type="button" data-toggle-local aria-expanded="true">
+              <span><span class="disclosure">▾</span> LOCAL GAMES</span><span data-local-count>0</span>
+            </button>
+            <div class="game-list" data-local-list></div>
+          </section>
+
           <section class="game-group" data-favorites-group hidden>
             <button class="group-heading" type="button" data-toggle-favorites aria-expanded="true">
               <span><span class="disclosure">▾</span> FAVORITES</span><span data-favorite-count>0</span>
@@ -102,6 +109,7 @@
             </dl>
             <div class="game-actions">
               <button type="button" data-detail-pin aria-label="Add to taskbar" title="Add to taskbar">Add to taskbar</button>
+              <button type="button" data-remove-local hidden aria-label="Remove local game" title="Remove local game">×</button>
               <button type="button" data-favorite aria-label="Add game to favorites" title="Add to favorites">♡</button>
             </div>
           </section>
@@ -124,7 +132,7 @@
             <aside class="metadata-panel">
               <h2>Game information</h2>
               <dl>
-                <div><dt>Provider</dt><dd>Fern</dd></div>
+                <div><dt>Provider</dt><dd data-meta-provider>Fern</dd></div>
                 <div><dt>Category</dt><dd data-meta-category>Game</dd></div>
                 <div><dt>Catalog ID</dt><dd data-meta-id>—</dd></div>
               </dl>
@@ -136,10 +144,39 @@
     </div>
 
     <footer class="client-footer">
-      <button type="button" data-home><span aria-hidden="true">＋</span> Browse library</button>
+      <button type="button" data-add-local><span aria-hidden="true">＋</span> Add a local game</button>
       <span data-footer-status>Initializing Fern…</span>
     </footer>
   </div>
+
+  <dialog class="local-game-dialog" data-local-dialog aria-labelledby="local-game-title">
+    <form method="dialog" data-local-form>
+      <header>
+        <div>
+          <span class="dialog-kicker">LOCAL LIBRARY</span>
+          <h2 id="local-game-title">Add a local game</h2>
+        </div>
+        <button class="dialog-close" type="button" data-local-cancel aria-label="Close">×</button>
+      </header>
+      <div class="local-game-form-grid">
+        <div class="local-cover-picker">
+          <div class="local-cover-preview" data-local-cover-preview><span>GAME<br>ART</span></div>
+          <label class="file-button">Choose picture<input type="file" data-local-cover accept="image/png,image/jpeg,image/webp,image/gif"></label>
+        </div>
+        <div class="local-fields">
+          <label><span>Game name</span><input type="text" data-local-name maxlength="64" required placeholder="My game"></label>
+          <label><span>Category</span><input type="text" data-local-category maxlength="36" placeholder="Indie"></label>
+          <label class="file-field"><span>Game file</span><input type="file" data-local-file accept=".html,.htm,text/html" required><small>Choose a self-contained HTML game (up to 16 MB).</small></label>
+          <label class="file-field"><span>Header artwork <em>optional</em></span><input type="file" data-local-banner accept="image/png,image/jpeg,image/webp,image/gif"><small>Wide artwork looks best. The cover is used when omitted.</small></label>
+        </div>
+      </div>
+      <p class="local-form-error" data-local-error hidden></p>
+      <footer>
+        <button type="button" class="dialog-secondary" data-local-cancel>Cancel</button>
+        <button type="submit" class="dialog-primary" data-local-submit>Add to library</button>
+      </footer>
+    </form>
+  </dialog>
 
   <section class="player" data-player hidden aria-label="Game player">
     <header class="player-bar">

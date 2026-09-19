@@ -9,6 +9,9 @@
   var favoritesKey = "neo_games_fern_favorites_v1";
   var statsKey = "neo_games_fern_stats_v1";
   var recentKey = "neo_games_fern_recent_v1";
+  var localGamesKey = "neo_games_local_library_v1";
+  var localGameDbName = "neo-local-games-v1";
+  var localGameStoreName = "files";
   var shellOrigin = "*";
 
   var state = {
@@ -30,6 +33,7 @@
     favorites: new Set(readStore(favoritesKey, [])),
     stats: readStore(statsKey, {}),
     recent: readStore(recentKey, []),
+    localGames: readStore(localGamesKey, []).map(normalizeLocalGame).filter(Boolean),
     gameMap: new Map(),
     imageUrls: new Map(),
     launchUrls: new Map()
@@ -88,6 +92,54 @@
       imageToken: cleanText(raw.image_token || raw.imageToken || raw.image, ""),
       raw: raw
     };
+  }
+
+  function normalizeLocalGame(raw, index) {
+    raw = raw || {};
+    var storageId = String(raw.storageId || raw.id || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 100);
+    if (!storageId) return null;
+    return {
+      id: "local/" + storageId,
+      storageId: storageId,
+      name: cleanText(raw.name, "Local game " + (Number(index) + 1)),
+      category: cleanText(raw.category, "Local game"),
+      provider: "Local",
+      image: /^data:image\/(?:avif|gif|jpeg|png|webp)(?:;[^,]*)?,/i.test(String(raw.image || "")) ? String(raw.image) : "",
+      banner: /^data:image\/(?:avif|gif|jpeg|png|webp)(?:;[^,]*)?,/i.test(String(raw.banner || "")) ? String(raw.banner) : "",
+      addedAt: Number(raw.addedAt) || Date.now(),
+      isLocal: true,
+      raw: raw
+    };
+  }
+
+  function localGameRecord(game) {
+    return {
+      storageId: game.storageId,
+      name: game.name,
+      category: game.category,
+      image: game.image || "",
+      banner: game.banner || "",
+      addedAt: game.addedAt || Date.now()
+    };
+  }
+
+  function persistLocalGames() {
+    writeStore(localGamesKey, state.localGames.map(localGameRecord));
+  }
+
+  function filteredLocalGames() {
+    var query = cleanText(state.query, "").toLowerCase();
+    if (!query) return state.localGames.slice();
+    return state.localGames.filter(function (game) {
+      return (game.name + " " + game.category).toLowerCase().indexOf(query) !== -1;
+    });
+  }
+
+  function hydrateLocalGames() {
+    state.localGames.forEach(function (game) {
+      state.gameMap.set(game.id, game);
+      if (game.image) state.imageUrls.set(game.id, game.image);
+    });
   }
 
   function loadScript(url) {
@@ -239,10 +291,18 @@
 
   function renderLists() {
     var list = $("[data-game-list]");
+    var localList = $("[data-local-list]");
     var favoritesList = $("[data-favorites-list]");
     var fragment = document.createDocumentFragment();
     state.games.forEach(function (game) { fragment.appendChild(createGameListItem(game, false)); });
     list.replaceChildren(fragment);
+
+    var localGames = filteredLocalGames();
+    var localFragment = document.createDocumentFragment();
+    localGames.forEach(function (game) { localFragment.appendChild(createGameListItem(game, false)); });
+    localList.replaceChildren(localFragment);
+    $("[data-local-group]").hidden = localGames.length === 0;
+    $("[data-local-count]").textContent = localGames.length.toLocaleString();
 
     var favoriteGames = [];
     state.favorites.forEach(function (id) {
@@ -299,7 +359,7 @@
 
   function updateHeroImage(game) {
     var backdrop = $("[data-hero-backdrop]");
-    var url = state.imageUrls.get(game.id);
+    var url = game.banner || state.imageUrls.get(game.id);
     backdrop.style.backgroundImage = url ? 'url("' + url.replace(/"/g, "%22") + '")' : "linear-gradient(135deg, #28506d, #151d28 68%)";
   }
 
@@ -317,10 +377,14 @@
     $("[data-last-played]").textContent = formatLastPlayed(stats.lastPlayed);
     $("[data-play-time]").textContent = formatPlayTime(stats.seconds);
     $("[data-about-title]").textContent = game.name + " is ready";
-    $("[data-about-copy]").textContent = "Launch this title directly through the Fern game service. Steam keeps your favorites, recent history, and play time on this device.";
+    $("[data-about-copy]").textContent = game.isLocal
+      ? "This game was added from your device. Its file, artwork, favorites, recent history, and play time stay in this browser."
+      : "Launch this title directly through the Fern game service. Steam keeps your favorites, recent history, and play time on this device.";
     $("[data-meta-category]").textContent = category;
     $("[data-meta-id]").textContent = game.id;
-    $("[data-game-source]").textContent = providerLabel;
+    $("[data-game-source]").textContent = game.provider || providerLabel;
+    $("[data-meta-provider]").textContent = game.provider || providerLabel;
+    $("[data-remove-local]").hidden = !game.isLocal;
     updateHeroImage(game);
     requestImage(game);
 
@@ -356,6 +420,7 @@
     if (state.loading || !window.Lumin || typeof window.Lumin.getGames !== "function") return;
     state.loading = true;
     state.failed = false;
+    state.query = query;
     var token = ++state.requestToken;
     renderLists();
     try {
@@ -375,10 +440,10 @@
       state.page = Number(response && response.page) || page;
       state.total = Number(response && response.total) || state.games.length;
       state.pages = Number(response && response.pages) || Math.max(1, Math.ceil(state.total / pageSize));
-      state.query = query;
-      $("[data-count]").textContent = state.total.toLocaleString() + " GAMES";
-      setProviderStatus(state.total.toLocaleString() + " games available from Fern", "online");
-      if (!state.selected && state.games.length) selectGame(state.games[0]);
+      var combinedTotal = state.total + filteredLocalGames().length;
+      $("[data-count]").textContent = combinedTotal.toLocaleString() + " GAMES";
+      setProviderStatus(state.total.toLocaleString() + " games from Fern" + (state.localGames.length ? " · " + state.localGames.length.toLocaleString() + " local" : ""), "online");
+      if (!state.selected && (state.localGames.length || state.games.length)) selectGame(state.localGames[0] || state.games[0]);
       else renderLists();
       loadImages(games);
     } catch (error) {
@@ -430,6 +495,13 @@
 
   async function resolveLaunchUrl(game) {
     if (state.launchUrls.has(game.id)) return state.launchUrls.get(game.id);
+    if (game.isLocal && game.storageId) {
+      var localPlayerUrl = new URL("./local-player.html", document.baseURI);
+      localPlayerUrl.searchParams.set("id", game.storageId);
+      localPlayerUrl.searchParams.set("name", game.name);
+      state.launchUrls.set(game.id, localPlayerUrl.href);
+      return localPlayerUrl.href;
+    }
     // Snow Rider's legacy Unity player can apply the jump input more than once
     // on high-refresh displays. Run this title through our small compatibility
     // page so its frame clock and repeated jump events are normalized. Other
@@ -523,7 +595,7 @@
       shortcutButton.textContent = "Add to taskbar";
       $("[data-player]").hidden = false;
       document.documentElement.classList.add("is-playing");
-      showFrameMessage("Launching " + game.name, "Loading directly from Fern…", false);
+      showFrameMessage("Launching " + game.name, game.isLocal ? "Opening the saved local game…" : "Loading directly from Fern…", false);
       frame.dataset.neoGameSource = launchUrl;
       frame.setAttribute("src", launchUrl);
       frameTimer = window.setTimeout(function () {
@@ -571,7 +643,7 @@
     var frame = $("[data-game-frame]");
     var url = state.activeLaunchUrl;
     resetGameFrame(frame);
-    showFrameMessage("Reloading " + state.activeGame.name, "Loading directly from Fern…", false);
+    showFrameMessage("Reloading " + state.activeGame.name, state.activeGame.isLocal ? "Opening the saved local game…" : "Loading directly from Fern…", false);
     window.setTimeout(function () {
       frame.dataset.neoGameSource = url;
       frame.setAttribute("src", url);
@@ -667,7 +739,7 @@
   }
 
   function goHome() {
-    if (state.games.length) selectGame(state.games[0]);
+    if (state.localGames.length || state.games.length) selectGame(state.localGames[0] || state.games[0]);
     $("[data-home].library-home").classList.add("is-active");
   }
 
@@ -677,6 +749,142 @@
     state.historyIndex = next;
     var game = state.gameMap.get(state.history[next]);
     if (game) selectGame(game, { fromHistory: true });
+  }
+
+  function openLocalGameDatabase() {
+    return new Promise(function (resolve, reject) {
+      var request = indexedDB.open(localGameDbName, 1);
+      request.onupgradeneeded = function () {
+        if (!request.result.objectStoreNames.contains(localGameStoreName)) request.result.createObjectStore(localGameStoreName);
+      };
+      request.onsuccess = function () { resolve(request.result); };
+      request.onerror = function () { reject(request.error || new Error("Local game storage is unavailable.")); };
+    });
+  }
+
+  async function saveLocalGameFile(id, file) {
+    var database = await openLocalGameDatabase();
+    await new Promise(function (resolve, reject) {
+      var transaction = database.transaction(localGameStoreName, "readwrite");
+      transaction.objectStore(localGameStoreName).put(file, id);
+      transaction.oncomplete = resolve;
+      transaction.onerror = function () { reject(transaction.error || new Error("The game file could not be saved.")); };
+      transaction.onabort = transaction.onerror;
+    });
+    database.close();
+  }
+
+  async function deleteLocalGameFile(id) {
+    var database = await openLocalGameDatabase();
+    await new Promise(function (resolve, reject) {
+      var transaction = database.transaction(localGameStoreName, "readwrite");
+      transaction.objectStore(localGameStoreName).delete(id);
+      transaction.oncomplete = resolve;
+      transaction.onerror = function () { reject(transaction.error || new Error("The local game file could not be removed.")); };
+      transaction.onabort = transaction.onerror;
+    });
+    database.close();
+  }
+
+  async function imageFileToDataUrl(file, width, height, quality) {
+    if (!file) return "";
+    var bitmap = await createImageBitmap(file);
+    var canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    var context = canvas.getContext("2d", { alpha: false });
+    context.fillStyle = "#172230";
+    context.fillRect(0, 0, width, height);
+    var scale = Math.max(width / bitmap.width, height / bitmap.height);
+    var drawWidth = bitmap.width * scale;
+    var drawHeight = bitmap.height * scale;
+    context.drawImage(bitmap, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+    bitmap.close();
+    return canvas.toDataURL("image/webp", quality || .82);
+  }
+
+  function resetLocalGameForm() {
+    var form = $("[data-local-form]");
+    form.reset();
+    $("[data-local-error]").hidden = true;
+    $("[data-local-cover-preview]").replaceChildren(Object.assign(document.createElement("span"), { innerHTML: "GAME<br>ART" }));
+    $("[data-local-submit]").disabled = false;
+    $("[data-local-submit]").textContent = "Add to library";
+  }
+
+  function openLocalGameDialog() {
+    resetLocalGameForm();
+    $("[data-local-dialog]").showModal();
+    window.setTimeout(function () { $("[data-local-name]").focus(); }, 30);
+  }
+
+  function closeLocalGameDialog() {
+    var dialog = $("[data-local-dialog]");
+    if (dialog.open) dialog.close();
+  }
+
+  async function addLocalGame(event) {
+    event.preventDefault();
+    var name = cleanText($("[data-local-name]").value, "").slice(0, 64);
+    var category = cleanText($("[data-local-category]").value, "Local game").slice(0, 36);
+    var gameFile = $("[data-local-file]").files[0];
+    var coverFile = $("[data-local-cover]").files[0];
+    var bannerFile = $("[data-local-banner]").files[0];
+    var errorNode = $("[data-local-error]");
+    var submit = $("[data-local-submit]");
+    function fail(message) {
+      errorNode.textContent = message;
+      errorNode.hidden = false;
+    }
+    if (!name) { fail("Enter a name for the game."); return; }
+    if (!gameFile || !/\.html?$/i.test(gameFile.name)) { fail("Choose an HTML game file."); return; }
+    if (gameFile.size > 16 * 1024 * 1024) { fail("Choose an HTML game smaller than 16 MB."); return; }
+    submit.disabled = true;
+    submit.textContent = "Adding…";
+    errorNode.hidden = true;
+    var storageId = "game-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    try {
+      var images = await Promise.all([
+        coverFile ? imageFileToDataUrl(coverFile, 256, 256, .84) : Promise.resolve(""),
+        bannerFile ? imageFileToDataUrl(bannerFile, 1280, 720, .8) : Promise.resolve("")
+      ]);
+      await saveLocalGameFile(storageId, gameFile);
+      var game = normalizeLocalGame({ storageId: storageId, name: name, category: category, image: images[0], banner: images[1] || images[0], addedAt: Date.now() }, 0);
+      state.localGames.unshift(game);
+      state.gameMap.set(game.id, game);
+      if (game.image) state.imageUrls.set(game.id, game.image);
+      persistLocalGames();
+      closeLocalGameDialog();
+      renderLists();
+      selectGame(game);
+      $("[data-count]").textContent = (state.total + state.localGames.length).toLocaleString() + " GAMES";
+      showToast(game.name + " was added to your local library.");
+    } catch (error) {
+      fail(cleanText(error && error.message, "The local game could not be added."));
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "Add to library";
+    }
+  }
+
+  async function removeSelectedLocalGame() {
+    var game = state.selected;
+    if (!game || !game.isLocal) return;
+    if (!window.confirm("Remove " + game.name + " from your local library?")) return;
+    try { await deleteLocalGameFile(game.storageId); } catch (_error) {}
+    state.localGames = state.localGames.filter(function (entry) { return entry.id !== game.id; });
+    state.gameMap.delete(game.id);
+    state.imageUrls.delete(game.id);
+    state.launchUrls.delete(game.id);
+    state.favorites.delete(game.id);
+    writeStore(favoritesKey, Array.from(state.favorites));
+    persistLocalGames();
+    state.selected = null;
+    renderLists();
+    var next = state.localGames[0] || state.games[0] || null;
+    if (next) selectGame(next); else updateSelectedGame();
+    $("[data-count]").textContent = (state.total + state.localGames.length).toLocaleString() + " GAMES";
+    showToast(game.name + " was removed.");
   }
 
   function bindEvents() {
@@ -690,16 +898,33 @@
       if (event.target.closest("[data-play]")) { openGame(state.selected); return; }
       if (event.target.closest("[data-favorite]")) { toggleFavorite(); return; }
       if (event.target.closest("[data-detail-pin]")) { addGameToTaskbar(state.selected); return; }
+      if (event.target.closest("[data-remove-local]")) { removeSelectedLocalGame(); return; }
+      if (event.target.closest("[data-add-local]")) { openLocalGameDialog(); return; }
       if (event.target.closest("[data-load-more]")) { fetchGames(state.page + 1, state.query, true); return; }
       if (event.target.closest("[data-retry]")) { location.reload(); return; }
       if (event.target.closest("[data-history-back]")) { navigateHistory(-1); return; }
       if (event.target.closest("[data-history-forward]")) { navigateHistory(1); return; }
       var favoriteToggle = event.target.closest("[data-toggle-favorites]");
       if (favoriteToggle) { setGroupExpanded(favoriteToggle, favoriteToggle.getAttribute("aria-expanded") !== "true"); return; }
+      var localToggle = event.target.closest("[data-toggle-local]");
+      if (localToggle) { setGroupExpanded(localToggle, localToggle.getAttribute("aria-expanded") !== "true"); return; }
       var libraryToggle = event.target.closest("[data-toggle-library]");
       if (libraryToggle) { setGroupExpanded(libraryToggle, libraryToggle.getAttribute("aria-expanded") !== "true"); return; }
       var menu = event.target.closest("[data-menu]");
       if (menu) showToast(menu.dataset.menu === "help" ? "Choose a game and select Play. Favorites and play time stay on this device." : "The Steam library view is already active.");
+    });
+
+    $("[data-local-form]").addEventListener("submit", addLocalGame);
+    $$('[data-local-cancel]').forEach(function (button) { button.addEventListener("click", closeLocalGameDialog); });
+    $("[data-local-cover]").addEventListener("change", function (event) {
+      var file = event.target.files[0];
+      var preview = $("[data-local-cover-preview]");
+      if (!file) { preview.innerHTML = "<span>GAME<br>ART</span>"; return; }
+      var image = document.createElement("img");
+      image.alt = "Selected cover preview";
+      image.src = URL.createObjectURL(file);
+      image.onload = function () { URL.revokeObjectURL(image.src); };
+      preview.replaceChildren(image);
     });
 
     $("[data-search]").addEventListener("input", function (event) {
@@ -759,6 +984,7 @@
     reload: function () { return fetchGames(1, state.query, false); }
   };
 
+  hydrateLocalGames();
   bindEvents();
   boot();
 })();
