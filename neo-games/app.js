@@ -62,6 +62,9 @@
   var shortcutRequestId = "";
   var gameWindowTimer = 0;
   var gameWindowRequestId = "";
+  var steamBootStartedAt = Date.now();
+  var steamBootDismissed = false;
+  var steamBootFallbackTimer = 0;
 
   function $(selector, root) {
     return (root || document).querySelector(selector);
@@ -395,6 +398,23 @@
     toastTimer = window.setTimeout(function () { toast.hidden = true; }, 2600);
   }
 
+  function finishSteamBoot() {
+    if (steamBootDismissed) return;
+    steamBootDismissed = true;
+    clearTimeout(steamBootFallbackTimer);
+    var bootScreen = $("[data-steam-boot]");
+    if (!bootScreen) return;
+    var status = $("[data-steam-boot-status]", bootScreen);
+    var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var minimumDuration = reduceMotion ? 0 : 1450;
+    var delay = Math.max(0, minimumDuration - (Date.now() - steamBootStartedAt));
+    window.setTimeout(function () {
+      if (status) status.textContent = "Library ready";
+      bootScreen.classList.add("is-leaving");
+      window.setTimeout(function () { bootScreen.hidden = true; }, reduceMotion ? 0 : 480);
+    }, delay);
+  }
+
   function formatCategory(value) {
     var text = cleanText(value, "Game");
     return text.replace(/[-_]+/g, " ").replace(/\b\w/g, function (letter) { return letter.toUpperCase(); });
@@ -700,6 +720,7 @@
       $("[data-shell]").setAttribute("aria-busy", "false");
       if (!firstSourceSettled) firstSourceSettled = true;
       await fetchGames(1, state.query, false);
+      finishSteamBoot();
     }
     initializeProvider().then(function () {
       state.fernReady = true;
@@ -1240,5 +1261,6 @@
 
   hydrateLocalGames();
   bindEvents();
+  steamBootFallbackTimer = window.setTimeout(finishSteamBoot, 5000);
   boot();
 })();
