@@ -539,6 +539,15 @@ input:focus-visible {
 }
 .game-actions button:hover,
 .game-actions button.is-active { background: rgba(75,91,107,.54); color: #fff; }
+.game-actions [data-detail-pin] {
+  width: auto;
+  min-width: 118px;
+  padding: 0 13px;
+  color: #d6d7d8;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 .game-actions [data-favorite].is-active { color: #66c0f4; }
 
 .detail-tabs {
