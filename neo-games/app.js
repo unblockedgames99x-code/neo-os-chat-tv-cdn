@@ -430,6 +430,15 @@
 
   async function resolveLaunchUrl(game) {
     if (state.launchUrls.has(game.id)) return state.launchUrls.get(game.id);
+    // Snow Rider's legacy Unity player can apply the jump input more than once
+    // on high-refresh displays. Run this title through our small compatibility
+    // page so its frame clock and repeated jump events are normalized. Other
+    // Fern titles continue to use their provider URL unchanged.
+    if (String(game.id || "").toLowerCase() === "selenite/snowrider3d") {
+      var stableSnowRiderUrl = new URL("./snow-rider-stable.html?build=20260919-jump-fix-v1", document.baseURI).href;
+      state.launchUrls.set(game.id, stableSnowRiderUrl);
+      return stableSnowRiderUrl;
+    }
     if (!window.Lumin || typeof window.Lumin.getGameUrl !== "function") throw new Error("Fern cannot launch this game right now");
     var response = await window.Lumin.getGameUrl(game.id);
     var url = safeUrl(typeof response === "string" ? response : response && response.url);
