@@ -7,5 +7,12 @@ window.NEO_GAMES_CONFIG = Object.freeze({
   pageSize: 48,
   imageBatchSize: 8,
   searchDelay: 300,
-  providerLabel: "Fern"
+  providerLabel: "Fern + Aether",
+  aether: {
+    base: "https://gn-local.booksforschool.online/",
+    catalog: "offline/catalog.json",
+    coverBase: "offline/covers/",
+    gameBase: "offline/html/",
+    expectedCount: 825
+  }
 });

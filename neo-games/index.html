@@ -5,13 +5,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#171a21">
-  <meta name="description" content="Steam — a desktop game library powered by the Fern catalog.">
+  <meta name="description" content="Steam — a desktop game library powered by the Fern and Aether catalogs.">
   <title>Steam</title>
   <script src="../neo-app-theme.js?v=20260907-theme-system-v2"></script>
   <link rel="stylesheet" href="../neo-fonts.css?v=20260912-native-fast-v1">
   <link rel="stylesheet" href="./app.css?v=20260919-local-games-v1">
-  <script src="./config.js?v=20260918-fern-v1"></script>
-  <script defer src="./app.js?v=20260919-local-games-v1"></script>
+  <script src="../neo-proxy-client.js?v=20260919-aether-games-v1"></script>
+  <script src="./config.js?v=20260919-aether-games-v1"></script>
+  <script defer src="./app.js?v=20260919-aether-games-v1"></script>
 </head>
 <body>
   <div class="steam-shell" data-shell aria-busy="true">
@@ -27,7 +28,7 @@
       </nav>
       <div class="client-status" data-provider-status>
         <span class="status-dot" aria-hidden="true"></span>
-        <span>Connecting to Fern</span>
+        <span>Connecting to game services</span>
       </div>
     </header>
 
@@ -35,7 +36,7 @@
       <button class="history-button" type="button" data-history-back disabled aria-label="Previous selection">‹</button>
       <button class="history-button" type="button" data-history-forward disabled aria-label="Next selection">›</button>
       <button class="library-tab" type="button" data-home>LIBRARY</button>
-      <div class="catalog-summary"><span data-count>LOADING</span><small>FERN CATALOG</small></div>
+      <div class="catalog-summary"><span data-count>LOADING</span><small>FERN + AETHER</small></div>
     </header>
 
     <div class="library-workspace">
@@ -83,7 +84,7 @@
         <section class="library-welcome" data-welcome>
           <img class="welcome-mark" src="../assets/steam.svg?v=20260918-steam-brand-v1" alt="">
           <h1>Steam</h1>
-          <p>Your Fern game library is loading.</p>
+          <p>Your game library is loading.</p>
           <button type="button" data-retry hidden>Retry connection</button>
         </section>
 
@@ -123,7 +124,7 @@
             <section class="about-panel">
               <div class="section-kicker">IN YOUR LIBRARY</div>
               <h2 data-about-title>Ready to play</h2>
-              <p data-about-copy>Select Play to launch this title directly from the Fern game service.</p>
+              <p data-about-copy>Select Play to launch this title from its game service.</p>
               <div class="recent-row" data-recent-row hidden>
                 <span class="recent-icon" aria-hidden="true">↻</span>
                 <div><strong>Recently played</strong><small data-recent-copy></small></div>
@@ -145,7 +146,7 @@
 
     <footer class="client-footer">
       <button type="button" data-add-local><span aria-hidden="true">＋</span> Add a local game</button>
-      <span data-footer-status>Initializing Fern…</span>
+      <span data-footer-status>Initializing game services…</span>
     </footer>
   </div>
 
@@ -194,7 +195,7 @@
       <div class="frame-status" data-frame-status>
         <span class="loading-ring" aria-hidden="true"></span>
         <strong>Preparing game…</strong>
-        <small>Requesting a direct launch URL from Fern</small>
+        <small>Requesting a launch URL from the game service</small>
       </div>
     </div>
   </section>
