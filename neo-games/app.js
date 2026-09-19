@@ -7,6 +7,7 @@
   var searchDelay = Math.max(100, Number(config.searchDelay) || 300);
   var providerLabel = String(config.providerLabel || "Fern");
   var aetherConfig = config.aether || {};
+  var gnMathConfig = config.gnMath || {};
   var favoritesKey = "neo_games_fern_favorites_v1";
   var statsKey = "neo_games_fern_stats_v1";
   var recentKey = "neo_games_fern_recent_v1";
@@ -24,6 +25,9 @@
     aetherReady: false,
     aetherError: "",
     aetherCatalog: [],
+    gnMathReady: false,
+    gnMathError: "",
+    gnMathCatalog: [],
     loading: false,
     failed: false,
     games: [],
@@ -153,6 +157,61 @@
     var needle = cleanText(query, "").toLowerCase();
     if (!needle) return state.aetherCatalog.slice();
     return state.aetherCatalog.filter(function (game) {
+      return (game.name + " " + game.category + " " + cleanText(game.raw && game.raw.author, "")).toLowerCase().indexOf(needle) !== -1;
+    });
+  }
+
+  function gnMathUrl(value, fallbackPath) {
+    var text = cleanText(value, fallbackPath || "")
+      .replace(/\{COVER_URL\}/g, cleanText(gnMathConfig.coverBase, "https://cdn.jsdelivr.net/gh/freebuisness/covers@main/").replace(/\/$/, ""))
+      .replace(/\{HTML_URL\}/g, cleanText(gnMathConfig.gameBase, "https://cdn.jsdelivr.net/gh/freebuisness/html@main/").replace(/\/$/, ""));
+    return safeUrl(text);
+  }
+
+  function normalizeGnMathGame(raw, index) {
+    raw = raw || {};
+    var sourceId = cleanText(raw.id, String(index));
+    if (Number(sourceId) < 0) return null;
+    var image = gnMathUrl(raw.cover, cleanText(gnMathConfig.coverBase, "") + sourceId + ".png");
+    var launchUrl = gnMathUrl(raw.url, cleanText(gnMathConfig.gameBase, "") + sourceId + ".html");
+    if (!launchUrl) return null;
+    var tags = Array.isArray(raw.special) ? raw.special.map(function (tag) { return cleanText(tag, ""); }).filter(Boolean) : [];
+    return {
+      id: "gn-math/" + sourceId,
+      sourceId: sourceId,
+      name: cleanText(raw.name || raw.title, "Untitled game"),
+      category: tags.length ? tags.join(" · ") : "Game",
+      provider: "GN Math",
+      image: image,
+      launchUrl: launchUrl,
+      isGnMath: true,
+      raw: raw
+    };
+  }
+
+  async function loadGnMathCatalog() {
+    var catalogUrl = safeUrl(gnMathConfig.catalog);
+    if (!catalogUrl) throw new Error("The GN Math catalog URL is invalid");
+    var fetcher = window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.fetch === "function"
+      ? window.NEO_PROXY_CLIENT.fetch.bind(window.NEO_PROXY_CLIENT)
+      : window.fetch.bind(window);
+    var response = await fetcher(catalogUrl, { cache: "no-store", credentials: "omit" });
+    if (!response.ok) throw new Error("GN Math returned " + response.status);
+    var payload = await response.json();
+    var rows = Array.isArray(payload) ? payload : Array.isArray(payload && payload.games) ? payload.games : [];
+    var games = rows.map(normalizeGnMathGame).filter(Boolean);
+    if (!games.length) throw new Error("The GN Math catalog is empty");
+    state.gnMathCatalog = games;
+    state.gnMathReady = true;
+    state.gnMathError = "";
+    games.forEach(function (game) { state.gameMap.set(game.id, game); });
+    return games;
+  }
+
+  function filteredGnMathGames(query) {
+    var needle = cleanText(query, "").toLowerCase();
+    if (!needle) return state.gnMathCatalog.slice();
+    return state.gnMathCatalog.filter(function (game) {
       return (game.name + " " + game.category + " " + cleanText(game.raw && game.raw.author, "")).toLowerCase().indexOf(needle) !== -1;
     });
   }
@@ -407,7 +466,7 @@
     if (!game || state.imageUrls.has(game.id)) return;
     try {
       var url = "";
-      if (game.isAether && game.image) {
+      if ((game.isAether || game.isGnMath) && game.image) {
         url = window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.image === "function"
           ? await window.NEO_PROXY_CLIENT.image(game.image)
           : safeUrl(game.image);
@@ -451,8 +510,8 @@
     $("[data-about-title]").textContent = game.name + " is ready";
     $("[data-about-copy]").textContent = game.isLocal
       ? "This game was added from your device. Its file, artwork, favorites, recent history, and play time stay in this browser."
-      : game.isAether
-        ? "Launch this Aether title through the NEO web transport. Steam keeps your favorites, recent history, and play time on this device."
+      : game.isAether || game.isGnMath
+        ? "Launch this " + game.provider + " title through the NEO web transport. Steam keeps your favorites, recent history, and play time on this device."
         : "Launch this title directly through the Fern game service. Steam keeps your favorites, recent history, and play time on this device.";
     $("[data-meta-category]").textContent = category;
     $("[data-meta-id]").textContent = game.id;
@@ -516,13 +575,16 @@
       var aetherMatches = filteredAetherGames(query);
       var aetherPages = Math.max(1, Math.ceil(aetherMatches.length / pageSize));
       var aetherGames = aetherMatches.slice((page - 1) * pageSize, page * pageSize);
+      var gnMathMatches = filteredGnMathGames(query);
+      var gnMathPages = Math.max(1, Math.ceil(gnMathMatches.length / pageSize));
+      var gnMathGames = gnMathMatches.slice((page - 1) * pageSize, page * pageSize);
       var seenNames = new Set(fernGames.map(function (game) { return game.name.toLowerCase(); }));
       var games = fernGames.concat(aetherGames.filter(function (game) {
         var name = game.name.toLowerCase();
         if (seenNames.has(name)) return false;
         seenNames.add(name);
         return true;
-      }));
+      }), gnMathGames);
       games.forEach(function (game) { state.gameMap.set(game.id, game); });
       if (append) {
         var known = new Set(state.games.map(function (game) { return game.id; }));
@@ -534,20 +596,21 @@
       state.page = page;
       state.fernTotal = Number(response && response.total) || (state.fernReady ? fernGames.length : 0);
       state.fernPages = Number(response && response.pages) || Math.max(1, Math.ceil(state.fernTotal / pageSize));
-      state.total = state.fernTotal + aetherMatches.length;
-      state.pages = Math.max(state.fernReady ? state.fernPages : 1, state.aetherReady ? aetherPages : 1);
+      state.total = state.fernTotal + aetherMatches.length + gnMathMatches.length;
+      state.pages = Math.max(state.fernReady ? state.fernPages : 1, state.aetherReady ? aetherPages : 1, state.gnMathReady ? gnMathPages : 1);
       var combinedTotal = state.total + filteredLocalGames().length;
       $("[data-count]").textContent = combinedTotal.toLocaleString() + " GAMES";
       var sourceParts = [];
       if (state.fernReady) sourceParts.push(state.fernTotal.toLocaleString() + " Fern");
       if (state.aetherReady) sourceParts.push(state.aetherCatalog.length.toLocaleString() + " Aether");
+      if (state.gnMathReady) sourceParts.push(state.gnMathCatalog.length.toLocaleString() + " GN Math");
       if (state.localGames.length) sourceParts.push(state.localGames.length.toLocaleString() + " local");
       setProviderStatus(sourceParts.length ? sourceParts.join(" · ") : "Game catalogs unavailable", sourceParts.length ? "online" : "error");
       if (!state.selected && (state.localGames.length || state.games.length)) selectGame(state.localGames[0] || state.games[0]);
       else renderLists();
       loadImages(games);
-      if (!games.length && !state.localGames.length && !state.aetherReady && (!state.fernReady || fernError)) {
-        throw fernError || new Error(state.aetherError || state.fernError || "No game catalog could be reached.");
+      if (!games.length && !state.localGames.length && !state.aetherReady && !state.gnMathReady && (!state.fernReady || fernError)) {
+        throw fernError || new Error(state.aetherError || state.gnMathError || state.fernError || "No game catalog could be reached.");
       }
     } catch (error) {
       if (token !== state.requestToken) return;
@@ -589,6 +652,11 @@
     }).catch(function (error) {
       state.aetherError = cleanText(error && error.message, "Aether could not initialize");
     }).finally(refreshAfterSource);
+    loadGnMathCatalog().then(function () {
+      state.ready = true;
+    }).catch(function (error) {
+      state.gnMathError = cleanText(error && error.message, "GN Math could not initialize");
+    }).finally(refreshAfterSource);
   }
 
   function toggleFavorite() {
@@ -609,13 +677,13 @@
       state.launchUrls.set(game.id, localPlayerUrl.href);
       return localPlayerUrl.href;
     }
-    if (game.isAether && game.launchUrl) {
-      var aetherLaunchUrl = window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.resolve === "function"
+    if ((game.isAether || game.isGnMath) && game.launchUrl) {
+      var proxiedLaunchUrl = window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.resolve === "function"
         ? await window.NEO_PROXY_CLIENT.resolve(game.launchUrl, "game")
         : safeUrl(game.launchUrl);
-      if (!aetherLaunchUrl) throw new Error("Aether returned an invalid game URL");
-      state.launchUrls.set(game.id, aetherLaunchUrl);
-      return aetherLaunchUrl;
+      if (!proxiedLaunchUrl) throw new Error(game.provider + " returned an invalid game URL");
+      state.launchUrls.set(game.id, proxiedLaunchUrl);
+      return proxiedLaunchUrl;
     }
     // Snow Rider's legacy Unity player can apply the jump input more than once
     // on high-refresh displays. Run this title through our small compatibility
@@ -678,9 +746,9 @@
           game: {
             id: game.id,
             title: game.name,
-            url: game.isAether ? game.launchUrl : launchUrl,
+            url: game.isAether || game.isGnMath ? game.launchUrl : launchUrl,
             icon: state.imageUrls.get(game.id) || "",
-            mode: game.isAether ? "relay" : "direct-game"
+            mode: game.isAether || game.isGnMath ? "relay" : "direct-game"
           }
         }, shellOrigin);
         $("[data-game-status]").textContent = "Opening in a separate window…";
@@ -710,7 +778,7 @@
       shortcutButton.textContent = "Add to taskbar";
       $("[data-player]").hidden = false;
       document.documentElement.classList.add("is-playing");
-      showFrameMessage("Launching " + game.name, game.isLocal ? "Opening the saved local game…" : game.isAether ? "Loading through the NEO web transport…" : "Loading directly from Fern…", false);
+      showFrameMessage("Launching " + game.name, game.isLocal ? "Opening the saved local game…" : game.isAether || game.isGnMath ? "Loading through the NEO web transport…" : "Loading directly from Fern…", false);
       frame.dataset.neoGameSource = launchUrl;
       frame.setAttribute("src", launchUrl);
       frameTimer = window.setTimeout(function () {
@@ -758,7 +826,7 @@
     var frame = $("[data-game-frame]");
     var url = state.activeLaunchUrl;
     resetGameFrame(frame);
-    showFrameMessage("Reloading " + state.activeGame.name, state.activeGame.isLocal ? "Opening the saved local game…" : state.activeGame.isAether ? "Loading through the NEO web transport…" : "Loading directly from Fern…", false);
+    showFrameMessage("Reloading " + state.activeGame.name, state.activeGame.isLocal ? "Opening the saved local game…" : state.activeGame.isAether || state.activeGame.isGnMath ? "Loading through the NEO web transport…" : "Loading directly from Fern…", false);
     window.setTimeout(function () {
       frame.dataset.neoGameSource = url;
       frame.setAttribute("src", url);
@@ -788,9 +856,9 @@
         id: shortcutRequestId,
         game: {
           title: game.name,
-          url: game.isAether ? game.launchUrl : launchUrl,
+          url: game.isAether || game.isGnMath ? game.launchUrl : launchUrl,
           icon: state.imageUrls.get(game.id) || "",
-          mode: game.isAether ? "relay" : "direct-game"
+          mode: game.isAether || game.isGnMath ? "relay" : "direct-game"
         }
       }, shellOrigin);
       shortcutTimer = window.setTimeout(function () {
