@@ -987,3 +987,45 @@ html[data-neo-app="chat"] :is(
   color: inherit;
   stroke: currentColor;
 }
+
+/* Keep the sidebar search icon and text on one exact center line. */
+.sidebar > .search-box {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 7px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+}
+.sidebar > .search-box > svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  align-self: center;
+  justify-self: center;
+  flex: none;
+}
+.sidebar > .search-box > input[type="search"] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  height: 34px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  align-self: center;
+  border: 0 !important;
+  border-radius: 0;
+  outline: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text);
+  line-height: normal;
+}
+.sidebar > .search-box > input[type="search"]::-webkit-search-decoration,
+.sidebar > .search-box > input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
