@@ -731,26 +731,34 @@ body {
 }
 #attachButton svg { width: 18px; height: 18px; stroke-width: 2; }
 .composer-field {
+  position: relative;
   min-height: 38px;
-  padding: 3px 4px 3px 13px;
+  padding: 3px 38px 3px 13px;
   align-items: center;
-  border: 1px solid rgba(120,120,128,.36);
+  border: 1px solid rgba(var(--accent-rgb), .72);
   border-radius: 20px;
   background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .05);
 }
 .composer-field:focus-within {
-  border-color: rgba(var(--accent-rgb), .72);
+  border-color: var(--messages-blue);
   background: rgba(var(--accent-rgb), .035);
-  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), .1);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), .13);
 }
 .composer textarea { min-height: 29px; padding: 6px 2px 4px; font-size: 15px; }
 .emoji-button {
+  position: absolute;
+  top: 50%;
+  right: 3px;
   width: 29px;
   height: 29px;
+  margin: 0;
   color: var(--messages-blue);
-  background: transparent;
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  transform: translateY(-50%);
 }
-.emoji-button:hover { color: var(--messages-blue); background: rgba(var(--accent-rgb), .11); }
+.emoji-button:hover { color: var(--messages-blue); background: rgba(var(--accent-rgb), .11); transform: translateY(-50%) scale(1.04); }
+.emoji-button:active { transform: translateY(-50%) scale(.92) !important; }
 .send-button { width: 35px; height: 35px; }
 .send-button:disabled {
   color: color-mix(in srgb, var(--messages-blue) 78%, var(--text) 22%);
@@ -787,6 +795,7 @@ button {
 }
 @media (hover: hover) {
   button:not(:disabled):hover { transform: translateY(-1px) scale(1.015); }
+  .composer-field .emoji-button:hover { transform: translateY(-50%) scale(1.04); }
   .conversation-row:not(:disabled):hover, .person-row:not(:disabled):hover { transform: translateX(3px); }
   .memoji-option:not(:disabled):hover { transform: translateY(-3px) scale(1.04); }
 }
