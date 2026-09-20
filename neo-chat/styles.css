@@ -1424,7 +1424,9 @@ html[data-neo-app="chat"] .emoji-button { width: 28px; height: 28px; }
 
 .gif-picker {
   width: min(450px, calc(100% - 24px));
+  max-width: calc(100vw - 16px);
   max-height: min(520px, calc(100% - 92px));
+  box-sizing: border-box;
   padding: 12px;
   display: grid;
   grid-template-rows: auto auto auto minmax(130px, 1fr) auto auto;

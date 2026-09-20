@@ -1120,12 +1120,31 @@
     el.gifResults.appendChild(status);
   }
 
-  async function remoteGifAttachment(result) {
-    var url = String(result && result.url || "").trim();
+  function gifRelayUrl(value) {
+    var url = new URL(String(value || ""));
+    if (url.protocol !== "https:") throw new Error("Use a secure HTTPS GIF link");
+    if (url.hostname === "images.weserv.nl" || url.hostname === "wsrv.nl") return url.href;
+    var source = url.href.replace(/^https:\/\//i, "");
+    return "https://images.weserv.nl/?url=" + encodeURIComponent(source) + "&output=gif&n=-1";
+  }
+
+  async function fetchGifBlob(value) {
+    var url = String(value || "").trim();
     if (!/^https:\/\//i.test(url)) throw new Error("Use a secure HTTPS GIF link");
-    var response = await fetch(url, { cache: "no-store", mode: "cors", referrerPolicy: "no-referrer" });
-    if (!response.ok) throw new Error("That GIF could not be downloaded");
-    var blob = await response.blob();
+    var candidates = [url, gifRelayUrl(url)].filter(function (candidate, index, list) { return list.indexOf(candidate) === index; });
+    for (var index = 0; index < candidates.length; index += 1) {
+      try {
+        var response = await fetch(candidates[index], { cache: "no-store", mode: "cors", referrerPolicy: "no-referrer" });
+        if (!response.ok) continue;
+        var blob = await response.blob();
+        if (blob && blob.size) return blob;
+      } catch (error) {}
+    }
+    throw new Error("That GIF could not be downloaded. Try another result.");
+  }
+
+  async function remoteGifAttachment(result) {
+    var blob = await fetchGifBlob(result && result.url);
     var type = String(blob.type || "").split(";")[0].toLowerCase();
     if (type !== "image/gif" && type !== "image/webp") throw new Error("That link is not a GIF or animated WebP");
     if (blob.size > 2.2 * 1024 * 1024) throw new Error("Choose a GIF under 2 MB");
@@ -1142,7 +1161,7 @@
       closeGifPicker();
       el.messageInput.focus();
     } catch (error) {
-      toast(error.message || "Could not add that GIF");
+      toast(error.message && error.message !== "Failed to fetch" ? error.message : "That GIF could not be downloaded. Try another result.");
     } finally {
       if (button) button.classList.remove("is-selecting");
     }
