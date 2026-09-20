@@ -25,7 +25,7 @@
   var playerLoadId = 0;
   var uploadedTitles = [];
   var shellPopoutActive = false;
-  var catalogApi = "https://vrcwat.ch/web/catalog";
+  var catalogApi = "https://cirrusbk6l.planet35.com";
   var catalogPageSize = 36;
   var offlineCatalog = window.NEO_MOVIES_OFFLINE_CATALOG || {};
   var offlineSeries = window.NEO_MOVIES_OFFLINE_SERIES || {};
@@ -100,14 +100,26 @@
     return proxy.resolve(value, kind || "fetch");
   }
   function proxyFetch(value, options) {
+    try {
+      if (new URL(String(value), document.baseURI).origin === new URL(catalogApi).origin) {
+        return fetch(value, Object.assign({ credentials: "omit", cache: "no-store" }, options || {}));
+      }
+    } catch (error) {}
     var proxy = window.NEO_PROXY_CLIENT;
     if (proxy && typeof proxy.fetch === "function") return proxy.fetch(value, options);
     if (window.parent !== window) return Promise.reject(new Error("The NEO web proxy is unavailable."));
     return fetch(value, Object.assign({ credentials: "omit", cache: "no-store" }, options || {}));
   }
   function catalogUrl(path, params) {
+    params = params || {};
+    if (path === "search") return catalogApi + "/_o/v/search?q=" + encodeURIComponent(params.q || "");
+    if (path === "details") {
+      var mediaType = params.type === "tv" || params.type === "series" ? "tv" : "movie";
+      return catalogApi + "/_o/v/details/" + mediaType + "/" + encodeURIComponent(params.id || "");
+    }
+    if (path === "top" || path === "discover") return catalogApi + "/_o/v/trending";
     var query = new URLSearchParams();
-    Object.keys(params || {}).forEach(function (key) {
+    Object.keys(params).forEach(function (key) {
       if (key === "label") return;
       var value = params[key];
       if (value !== "" && value != null) query.set(key, String(value));
@@ -115,27 +127,35 @@
     return catalogApi + "/" + path + (query.toString() ? "?" + query.toString() : "");
   }
   function catalogType(value) {
-    return value === "m" ? "movie" : (value === "tv" ? "series" : (value === "a" ? "anime" : "movie"));
+    value = String(value || "").toLowerCase();
+    return value === "m" || value === "movie" ? "movie" : (value === "tv" || value === "series" ? "series" : (value === "a" || value === "anime" ? "anime" : "movie"));
+  }
+  function catalogImage(value, size) {
+    value = String(value || "").trim();
+    if (!value) return "";
+    if (/^https:\/\//i.test(value)) return value;
+    return catalogApi + "/_o/v/img/" + (size || "w780") + "/" + value.replace(/^\/+/, "");
   }
   function catalogTitle(item, rowGenre) {
-    var type = catalogType(item && item.type);
+    var type = catalogType(item && (item.media_type || item.type));
+    var typeCode = type === "series" ? "tv" : (type === "anime" ? "a" : "m");
     var providerId = String(item && item.id || "");
-    var rating = parseFloat(String(item && item.rating || ""));
+    var rating = parseFloat(String(item && (item.vote_average != null ? item.vote_average : item.rating) || ""));
     var officialUrl = type === "anime" ? "https://anilist.co/anime/" + encodeURIComponent(providerId) :
       "https://www.themoviedb.org/" + (type === "series" ? "tv" : "movie") + "/" + encodeURIComponent(providerId);
     return {
-      id: "catalog-" + (item && item.type || "m") + "-" + providerId,
-      title: clean(item && item.title || "Untitled"),
+      id: "catalog-" + typeCode + "-" + providerId,
+      title: clean(item && (item.title || item.name) || "Untitled"),
       type: type,
-      year: clean(item && item.year || "").slice(0, 4),
+      year: clean(item && (item.release_date || item.first_air_date || item.year) || "").slice(0, 4),
       genre: rowGenre || (type === "series" ? "Series" : (type === "anime" ? "Anime" : "Movie")),
       maturity: "",
       rating: Number.isFinite(rating) ? rating : "",
       description: clean(item && item.overview) || "Explore this title and find an official place to watch.",
-      poster: /^https:\/\//i.test(String(item && item.posterUrl || "")) ? item.posterUrl : "",
-      backdrop: /^https:\/\//i.test(String(item && item.backdropUrl || "")) ? item.backdropUrl : "",
+      poster: catalogImage(item && (item.poster_path || item.posterUrl), "w780"),
+      backdrop: catalogImage(item && (item.backdrop_path || item.backdropUrl), "original"),
       officialUrl: officialUrl,
-      provider: "public-catalog",
+      provider: "scholarnook-cirrus",
       providerId: providerId
     };
   }
@@ -203,10 +223,30 @@
       return response.json();
     }).then(function (payload) {
       var genre = params && params.label || "";
-      var results = Array.isArray(payload && payload.results) ? payload.results : [];
+      var results = [];
+      if (path === "search") {
+        results = Array.isArray(payload && payload.results) ? payload.results : [];
+      } else {
+        var sections = Array.isArray(payload && payload.sections) ? payload.sections : [];
+        var wanted = path === "top" ? "Trending This Week" :
+          (params.type === "tv" && params.sort === "rating" ? "Top Rated TV" :
+          (params.type === "tv" ? "Popular TV Shows" :
+          (params.sort === "rating" ? "Top Rated Movies" :
+          (params.sort === "release_date" ? "Now Playing" : "Popular Movies"))));
+        var section = sections.find(function (entry) { return clean(entry && entry.title).toLowerCase() === wanted.toLowerCase(); });
+        results = section && Array.isArray(section.items) ? section.items : (Array.isArray(payload && payload.hero) ? payload.hero : []);
+      }
+      var requestedType = String(params && params.type || "all");
+      if (requestedType !== "all") results = results.filter(function (item) {
+        return requestedType === "tv" ? catalogType(item && (item.media_type || item.type)) === "series" : catalogType(item && (item.media_type || item.type)) === "movie";
+      });
+      if (params && params.genre) results = results.filter(function (item) {
+        return Array.isArray(item && item.genre_ids) && item.genre_ids.map(String).indexOf(String(params.genre)) !== -1;
+      });
+      if (Number(params && params.page || 1) > 1) results = [];
       return {
-        page: Number(payload && payload.page) || Number(params && params.page) || 1,
-        hasMore: Boolean(payload && payload.hasMore),
+        page: Number(params && params.page) || 1,
+        hasMore: false,
         items: rememberTitles(results.map(function (item) { return catalogTitle(item, genre); }))
       };
     }).catch(function () {
@@ -217,8 +257,8 @@
     return (Array.isArray(items) ? items : []).map(function (season) {
       if (Array.isArray(season)) return { number: Number(season[0]), episodes: Number(season[1]), name: clean(season[2]) || "Season " + season[0] };
       return {
-        number: Number(season && (season.seasonNumber != null ? season.seasonNumber : season.number)),
-        episodes: Number(season && (season.episodeCount != null ? season.episodeCount : season.episodes)),
+        number: Number(season && (season.seasonNumber != null ? season.seasonNumber : (season.season_number != null ? season.season_number : season.number))),
+        episodes: Number(season && (season.episodeCount != null ? season.episodeCount : (season.episode_count != null ? season.episode_count : season.episodes))),
         name: clean(season && (season.seasonName || season.name))
       };
     }).filter(function (season) { return season.number > 0 && season.episodes > 0; }).sort(function (a, b) { return a.number - b.number; });
