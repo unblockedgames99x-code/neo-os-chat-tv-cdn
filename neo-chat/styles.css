@@ -708,27 +708,56 @@ body {
 .composer {
   min-height: 64px;
   padding: 8px 16px 12px;
+  align-items: center;
   gap: 9px;
   border-top: 0;
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(28px) saturate(170%);
 }
-.composer-tool, .send-button { width: 35px; height: 35px; }
-#attachButton { color: #fff; background: #a7a7ad; }
-#attachButton:hover { background: var(--messages-blue); }
+.composer-tool, .send-button {
+  width: 35px;
+  height: 35px;
+  align-self: center;
+}
+#attachButton {
+  color: var(--accent-contrast, #fff);
+  background: var(--messages-blue);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), .22);
+}
+#attachButton:hover {
+  color: var(--accent-contrast, #fff);
+  background: color-mix(in srgb, var(--messages-blue) 84%, var(--text) 16%);
+  transform: scale(1.04);
+}
 #attachButton svg { width: 18px; height: 18px; stroke-width: 2; }
 .composer-field {
   min-height: 38px;
   padding: 3px 4px 3px 13px;
+  align-items: center;
   border: 1px solid rgba(120,120,128,.36);
   border-radius: 20px;
   background: transparent;
 }
-.composer-field:focus-within { border-color: rgba(var(--accent-rgb),.58); background: transparent; box-shadow: none; }
+.composer-field:focus-within {
+  border-color: rgba(var(--accent-rgb), .72);
+  background: rgba(var(--accent-rgb), .035);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), .1);
+}
 .composer textarea { min-height: 29px; padding: 6px 2px 4px; font-size: 15px; }
-.emoji-button { width: 29px; height: 29px; color: #8e8e93; background: transparent; }
-.send-button { width: 32px; height: 32px; align-self: center; }
-.send-button:disabled { color: #fff; background: #c7c7cc; opacity: .72; }
+.emoji-button {
+  width: 29px;
+  height: 29px;
+  color: var(--messages-blue);
+  background: transparent;
+}
+.emoji-button:hover { color: var(--messages-blue); background: rgba(var(--accent-rgb), .11); }
+.send-button { width: 35px; height: 35px; }
+.send-button:disabled {
+  color: color-mix(in srgb, var(--messages-blue) 78%, var(--text) 22%);
+  background: rgba(var(--accent-rgb), .16);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .12);
+  opacity: 1;
+}
 .reply-strip, .attachment-strip { border-color: var(--messages-divider); background: var(--surface-2); }
 
 .empty-orb { color: #fff; background: var(--messages-blue); box-shadow: 0 14px 34px rgba(10,132,255,.24); }
