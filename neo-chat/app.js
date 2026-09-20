@@ -1221,6 +1221,11 @@
     el.searchInput.addEventListener("input", renderSidebar);
     el.composeButton.addEventListener("click", function () { renderPeople(""); showOverlay(el.newChatOverlay); });
     el.emptyStartButton.addEventListener("click", function () { renderPeople(""); showOverlay(el.newChatOverlay); });
+    el.newChatOverlay.addEventListener("pointerdown", function (event) {
+      if (event.target !== el.newChatOverlay) return;
+      hideOverlay(el.newChatOverlay);
+      window.setTimeout(function () { el.composeButton.focus(); }, 0);
+    });
     el.peopleSearch.addEventListener("input", function () { renderPeople(el.peopleSearch.value); });
     el.backButton.addEventListener("click", function () { el.app.classList.remove("conversation-open"); });
     el.headerPerson.addEventListener("click", openDetails); el.infoButton.addEventListener("click", openDetails); el.detailsClose.addEventListener("click", closeDetails);
@@ -1239,7 +1244,14 @@
     el.emojiButton.addEventListener("click", function () { el.emojiPopover.hidden = !el.emojiPopover.hidden; });
     document.addEventListener("pointerdown", function (event) { if (!el.emojiPopover.hidden && !event.target.closest("#emojiPopover, #emojiButton")) el.emojiPopover.hidden = true; });
     document.addEventListener("pointerdown", function (event) { if (state.actionMenu && !event.target.closest(".message-action-menu, [data-action=more]")) closeMessageActionMenu(); });
-    document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeMessageActionMenu(); });
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") return;
+      closeMessageActionMenu();
+      if (!el.newChatOverlay.hidden) {
+        hideOverlay(el.newChatOverlay);
+        window.setTimeout(function () { el.composeButton.focus(); }, 0);
+      }
+    });
     el.messageScroll.addEventListener("click", handleMessageAction);
     el.audioCallButton.addEventListener("click", function () { toast("Audio calls need the server's DM calling endpoint."); });
     el.videoCallButton.addEventListener("click", function () { toast("Video calls need the server's DM calling endpoint."); });
