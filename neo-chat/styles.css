@@ -227,6 +227,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-lineca
 .memoji-studio { margin: 0 0 13px; padding: 12px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-2); }
 .memoji-stage { height: 112px; display: grid; place-items: center; border-radius: 14px; background: radial-gradient(circle at 50% 36%, rgba(255,255,255,.08), transparent 62%); }
 .memoji-preview { width: 108px; height: 108px; display: block; border-radius: 50%; box-shadow: 0 0 0 3px rgba(255,255,255,.08), 0 12px 30px rgba(0,0,0,.25); }
+.memoji-preview.has-photo { overflow: hidden; background: var(--surface-3); }
+.memoji-preview.has-photo img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .memoji-category-tabs { margin: 11px -2px 9px; padding: 2px; display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
 .memoji-category-tabs::-webkit-scrollbar { display: none; }
 .memoji-category-tab { flex: none; min-width: 58px; height: 31px; padding: 0 10px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; cursor: pointer; font-size: 9.5px; font-weight: 680; }

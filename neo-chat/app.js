@@ -1373,10 +1373,20 @@
 
   function renderNeojis() {
     el.memojiOptionGrid.replaceChildren();
-    el.memojiPersonalizer.hidden = state.profileChoice.kind !== "tapback";
+    el.memojiPersonalizer.hidden = false;
     el.memojiPreview.replaceChildren();
-    el.memojiPreview.classList.remove("has-tapback");
-    if (state.profileChoice.kind === "tapback") paintTapback(el.memojiPreview, state.me, state.profileChoice.value);
+    el.memojiPreview.classList.remove("has-tapback", "has-photo");
+    if (state.profileChoice.kind === "photo" && /^data:image\//.test(state.profileChoice.value || "")) {
+      var currentPhoto = document.createElement("img");
+      currentPhoto.alt = "Current custom profile picture";
+      currentPhoto.decoding = "async";
+      currentPhoto.loading = "eager";
+      currentPhoto.src = state.profileChoice.value;
+      el.memojiPreview.classList.add("has-photo");
+      el.memojiPreview.appendChild(currentPhoto);
+    } else if (state.profileChoice.kind === "tapback") {
+      paintTapback(el.memojiPreview, state.me, state.profileChoice.value);
+    }
     Array.from({ length: TAPBACK_AVATAR_COUNT }).forEach(function (_, index) {
       var button = document.createElement("button");
       button.type = "button";
