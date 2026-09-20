@@ -28,6 +28,7 @@
     friends: [],
     unreads: {},
     mutedChannels: new Set(),
+    mentionNoticeIds: new Set(),
     pinnedChannelIds: [],
     draggedChannelId: "",
     messages: new Map(),
@@ -238,6 +239,41 @@
     return String(value || "").replace(/Chalkle Chat/gi, "NEO Chat").replace(/\bChalkle\b/g, "NEO");
   }
 
+  function mentionPattern() {
+    return /(^|[^A-Za-z0-9_.-])@([A-Za-z0-9_][A-Za-z0-9_.-]{1,31})(?=$|[^A-Za-z0-9_.-])/gi;
+  }
+
+  function mentionNames(value) {
+    var names = [];
+    var pattern = mentionPattern();
+    var match;
+    while ((match = pattern.exec(String(value || "")))) names.push(String(match[2] || "").toLowerCase());
+    return names;
+  }
+
+  function messageMentionsMe(message) {
+    if (!state.me || !message || message.authorId === state.me.id) return false;
+    var names = mentionNames(message.text);
+    return names.indexOf("everyone") !== -1 || names.indexOf(String(state.me.username || "").toLowerCase()) !== -1;
+  }
+
+  function appendMessageText(container, value) {
+    var text = displayMessageText(value);
+    var pattern = mentionPattern();
+    var cursor = 0;
+    var match;
+    while ((match = pattern.exec(text))) {
+      var mentionStart = match.index + match[1].length;
+      if (mentionStart > cursor) container.appendChild(document.createTextNode(text.slice(cursor, mentionStart)));
+      var mention = document.createElement("strong");
+      mention.className = "message-mention";
+      mention.textContent = "@" + match[2];
+      container.appendChild(mention);
+      cursor = pattern.lastIndex;
+    }
+    if (cursor < text.length) container.appendChild(document.createTextNode(text.slice(cursor)));
+  }
+
   function isHiddenPublicRoom(channel) {
     if (!channel || channel.kind !== "server") return false;
     var name = String(channel.name || "").trim().toLowerCase().replace(/[-_]+/g, " ");
@@ -246,6 +282,54 @@
 
   function notificationStorageKey() {
     return "neo-chat-muted:" + String(state.me && state.me.id || "guest");
+  }
+
+  function mentionNoticeStorageKey() {
+    return "neo-chat-mention-notices:" + String(state.me && state.me.id || "guest");
+  }
+
+  function loadMentionNotices() {
+    var saved = [];
+    try { saved = JSON.parse(localStorage.getItem(mentionNoticeStorageKey()) || "[]"); } catch (error) { saved = []; }
+    state.mentionNoticeIds = new Set((Array.isArray(saved) ? saved : []).map(String).slice(-300));
+  }
+
+  function persistMentionNotices() {
+    try { localStorage.setItem(mentionNoticeStorageKey(), JSON.stringify(Array.from(state.mentionNoticeIds).slice(-300))); } catch (error) {}
+  }
+
+  function mentionNoticeId(channel, message) {
+    return String(channel && channel.id || "global") + ":" + String(message && message.id || message && message.createdAt || "");
+  }
+
+  function showMentionNotification(channel, message) {
+    if (!channel || !message || state.mutedChannels.has(String(channel.id))) return;
+    var author = cleanDisplayName(userFor(message.authorId));
+    var everyone = mentionNames(message.text).indexOf("everyone") !== -1;
+    var title = author + (everyone ? " mentioned everyone" : " mentioned you");
+    toast(title + " in " + channelTitle(channel) + ".");
+    if ("Notification" in window && Notification.permission === "granted" && (document.hidden || !document.hasFocus())) {
+      try {
+        var notice = new Notification(title, { body: displayMessageText(message.text).slice(0, 140), icon: "../assets/imessage-logo.png", tag: "neo-chat-mention-" + mentionNoticeId(channel, message) });
+        notice.onclick = function () { window.focus(); openChannel(channel.id); notice.close(); };
+      } catch (error) {}
+    }
+  }
+
+  function scanMentionNotifications(channel, messages, initial) {
+    var pending = [];
+    var now = Date.now();
+    var lastRead = Number(state.unreads[String(channel && channel.id || "")] || 0);
+    (Array.isArray(messages) ? messages : []).forEach(function (message) {
+      if (!messageMentionsMe(message)) return;
+      var id = mentionNoticeId(channel, message);
+      if (state.mentionNoticeIds.has(id)) return;
+      state.mentionNoticeIds.add(id);
+      var createdAt = Number(message.createdAt || 0);
+      if (!initial || (createdAt > lastRead && createdAt > now - 86400000)) pending.push(message);
+    });
+    pending.slice(-3).forEach(function (message) { showMentionNotification(channel, message); });
+    if (pending.length || state.mentionNoticeIds.size) persistMentionNotices();
   }
 
   function pinnedStorageKey() {
@@ -696,11 +780,12 @@
     state.channelMap = new Map(state.channels.map(function (channel) { return [channel.id, channel]; }));
     loadMutedChannels();
     loadPinnedChannels();
+    loadMentionNotices();
     loadProfile();
     updateMe();
     updateRequestBadge();
     renderSidebar();
-    await loadPreviews();
+    await loadPreviews({ initial: true });
     renderSidebar();
     connectSocket();
     setConnection("Live", true);
@@ -712,13 +797,17 @@
     startPolling();
   }
 
-  async function loadPreviews() {
+  async function loadPreviews(options) {
+    options = options || {};
     var channels = state.channels.slice(0, 24);
     await Promise.all(channels.map(async function (channel) {
       try {
         state.messages.set(channel.id, await loadChannelMessages(channel));
       } catch (error) {}
     }));
+    channels.forEach(function (channel) {
+      scanMentionNotifications(channel, state.messages.get(channel.id) || [], Boolean(options.initial));
+    });
   }
 
   function normalizeMessages(messages) {
@@ -826,7 +915,7 @@
     var mine = state.me && message.authorId === state.me.id;
     var author = userFor(message.authorId);
     var row = document.createElement("article");
-    row.className = "message-group" + (mine ? " mine" : "") + (groupStart ? " group-start" : "") + (groupEnd ? " group-end" : "");
+    row.className = "message-group" + (mine ? " mine" : "") + (messageMentionsMe(message) ? " is-mentioned" : "") + (groupStart ? " group-start" : "") + (groupEnd ? " group-end" : "");
     row.dataset.message = message.id;
     if (!mine) row.appendChild(createAvatar(author, "message-avatar"));
     var stack = document.createElement("div"); stack.className = "message-stack";
@@ -838,7 +927,7 @@
       var target = (state.messages.get(state.activeChannel.id) || []).find(function (item) { return item.id === message.replyTo; });
       var reply = document.createElement("span"); reply.className = "message-reply"; reply.textContent = target ? cleanDisplayName(userFor(target.authorId)) + ": " + displayMessageText(target.text || "Attachment").slice(0, 80) : "Reply"; bubble.appendChild(reply);
     }
-    if (message.text) bubble.appendChild(document.createTextNode(displayMessageText(message.text)));
+    if (message.text) appendMessageText(bubble, message.text);
     renderAttachments(bubble, message.attachments);
     var tools = document.createElement("span"); tools.className = "message-tools";
     var replyButton = document.createElement("button"); replyButton.type = "button"; replyButton.title = "Reply"; replyButton.textContent = "↩"; replyButton.dataset.action = "reply"; tools.appendChild(replyButton);
@@ -976,6 +1065,8 @@
     var index = list.findIndex(function (item) { return item.id === message.id; });
     if (index >= 0) list[index] = message; else list.push(message);
     state.messages.set(channelId, normalizeMessages(list));
+    var channel = state.channelMap.get(channelId);
+    if (channel) scanMentionNotifications(channel, [message], false);
     if (state.activeChannel && state.activeChannel.id === channelId) {
       if (state.activeChannel.backend === "blink") rememberBlinkRead(channelId, Date.now());
       else {

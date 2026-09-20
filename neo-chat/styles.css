@@ -698,6 +698,20 @@ body {
   line-height: 1.32;
   letter-spacing: -.008em;
 }
+.message-mention {
+  padding: 0 .16em;
+  border-radius: .34em;
+  color: var(--messages-blue);
+  background: color-mix(in srgb, var(--messages-blue) 12%, transparent);
+  font-weight: 800;
+}
+.message-group.mine .message-mention {
+  color: inherit;
+  background: rgba(255,255,255,.16);
+}
+.message-group.is-mentioned:not(.mine) .message-bubble {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--messages-blue) 42%, transparent), 0 0 14px color-mix(in srgb, var(--messages-blue) 12%, transparent);
+}
 .message-group.mine .message-bubble { background: var(--messages-blue); }
 .message-group.group-end:not(.mine) .message-bubble::after { left: -4px; width: 11px; height: 12px; }
 .message-group.group-end.mine .message-bubble::after { right: -4px; width: 11px; height: 12px; }
