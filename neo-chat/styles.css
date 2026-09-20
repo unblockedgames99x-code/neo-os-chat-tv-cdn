@@ -789,9 +789,8 @@ html[data-neo-app="chat"] .composer textarea:focus-visible {
 .profile-card { width: min(100%, 700px); }
 .profile-card .modal-intro { margin-bottom: 12px; }
 .profile-card .memoji-studio { padding: 14px; }
-.memoji-library-heading { margin: 12px 2px 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.memoji-library-heading { margin: 12px 2px 8px; }
 .memoji-library-heading strong { font-size: 12px; font-weight: 680; }
-.memoji-library-heading span { color: var(--muted); font-size: 10.5px; }
 .profile-card .memoji-option-grid {
   max-height: none;
   margin-top: 0;
@@ -1112,7 +1111,6 @@ button:focus-visible { outline: 3px solid rgba(var(--accent-rgb),.35); outline-o
   .message-stack { max-width: 82%; }
   .composer { padding-inline: 10px; }
   .profile-card .memoji-option-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .memoji-library-heading { align-items: flex-start; flex-direction: column; gap: 2px; }
 }
 
 /* The selected conversation and its artwork must remain readable for every
