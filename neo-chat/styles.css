@@ -665,6 +665,13 @@ body {
   background: rgba(120,120,128,.10);
 }
 .header-actions .icon-button:hover { color: #fff; background: var(--messages-blue); }
+.header-actions #infoButton,
+.header-actions #infoButton:hover {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.header-actions #infoButton:hover { color: var(--messages-blue); }
 .header-actions svg { width: 18px; height: 18px; }
 
 .message-scroll {
