@@ -277,8 +277,6 @@
   function applyAccent() {
     var value = getComputedStyle(document.documentElement).getPropertyValue("--desktop-accent").trim();
     if (!value) return;
-    document.documentElement.style.setProperty("--accent", value);
-    document.documentElement.style.setProperty("--messages-blue", value);
     var probe = document.createElement("span");
     probe.style.color = value;
     document.body.appendChild(probe);
@@ -286,6 +284,21 @@
     probe.remove();
     if (rgb && rgb.length >= 3) {
       var channels = rgb.slice(0, 3).map(Number);
+      var maximum = Math.max.apply(Math, channels);
+      var minimum = Math.min.apply(Math, channels);
+      var saturation = maximum ? (maximum - minimum) / maximum : 0;
+      var themeLuminance = (channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722) / 255;
+
+      // A white, black, or nearly neutral desktop accent cannot identify selected
+      // conversations reliably. Keep the theme surfaces, but use Messages blue for
+      // interactive Chat states so avatars and labels always retain contrast.
+      if (themeLuminance > 0.82 || themeLuminance < 0.14 || saturation < 0.16) {
+        value = "#0a84ff";
+        channels = [10, 132, 255];
+      }
+
+      document.documentElement.style.setProperty("--accent", value);
+      document.documentElement.style.setProperty("--messages-blue", value);
       document.documentElement.style.setProperty("--accent-rgb", channels.join(", "));
       var luminance = (channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722) / 255;
       document.documentElement.style.setProperty("--accent-contrast", luminance > 0.62 ? "#08090b" : "#ffffff");

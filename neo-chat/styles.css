@@ -931,3 +931,34 @@ button:focus-visible { outline: 3px solid rgba(var(--accent-rgb),.35); outline-o
   .profile-card .memoji-option-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .memoji-library-heading { align-items: flex-start; flex-direction: column; gap: 2px; }
 }
+
+/* The selected conversation and its artwork must remain readable for every
+   desktop theme, including OLED themes whose desktop accent is pure white. */
+html[data-neo-app="chat"] .conversation-row.active {
+  color: var(--accent-contrast, #fff);
+  background: var(--messages-blue, #0a84ff);
+}
+html[data-neo-app="chat"] .conversation-row.active .row-copy span {
+  color: var(--accent-contrast, #fff);
+}
+html[data-neo-app="chat"] .conversation-row.active :is(.row-copy small, .row-meta) {
+  color: color-mix(in srgb, var(--accent-contrast, #fff) 82%, transparent);
+}
+html[data-neo-app="chat"] .conversation-row.active .unread-badge {
+  color: var(--messages-blue, #0a84ff);
+  background: var(--accent-contrast, #fff);
+}
+html[data-neo-app="chat"] :is(
+  .global-row .avatar,
+  .chat-header .header-person .avatar:has(use[href="#i-globe"])
+) {
+  color: var(--accent-contrast, #fff) !important;
+  background: var(--messages-blue, #0a84ff) !important;
+}
+html[data-neo-app="chat"] :is(
+  .global-row .avatar,
+  .chat-header .header-person .avatar:has(use[href="#i-globe"])
+) svg {
+  color: inherit;
+  stroke: currentColor;
+}
