@@ -28,6 +28,8 @@
     friends: [],
     unreads: {},
     mutedChannels: new Set(),
+    pinnedChannelIds: [],
+    draggedChannelId: "",
     messages: new Map(),
     activeChannel: null,
     activeView: "chats",
@@ -246,6 +248,10 @@
     return "neo-chat-muted:" + String(state.me && state.me.id || "guest");
   }
 
+  function pinnedStorageKey() {
+    return "neo-chat-pinned:" + String(state.me && state.me.id || "guest");
+  }
+
   function loadMutedChannels() {
     var saved = state.settings && state.settings.neoChatMutedChannels;
     if (!Array.isArray(saved)) {
@@ -259,6 +265,60 @@
     state.settings.neoChatMutedChannels = values;
     try { localStorage.setItem(notificationStorageKey(), JSON.stringify(values)); } catch (error) {}
     await api("/api/me/settings", { method: "PATCH", body: { neoChatMutedChannels: values } }).catch(function () {});
+  }
+
+  function loadPinnedChannels() {
+    var saved = state.settings && state.settings.neoChatPinnedChannels;
+    var hasSavedPins = Array.isArray(saved);
+    if (!Array.isArray(saved)) {
+      try {
+        var stored = localStorage.getItem(pinnedStorageKey());
+        hasSavedPins = stored !== null;
+        saved = JSON.parse(stored || "[]");
+      } catch (error) { saved = []; }
+    }
+    var available = new Set(state.channels.map(function (channel) { return String(channel.id); }));
+    state.pinnedChannelIds = (Array.isArray(saved) ? saved : []).map(String).filter(function (id, index, ids) {
+      return available.has(id) && ids.indexOf(id) === index;
+    }).slice(0, 9);
+    if (!state.pinnedChannelIds.length && !hasSavedPins) {
+      var global = state.channels.find(function (channel) { return channel.kind === "server" && String(channel.name).toLowerCase() === "general"; });
+      if (global) state.pinnedChannelIds.push(String(global.id));
+    }
+  }
+
+  async function persistPinnedChannels() {
+    var values = state.pinnedChannelIds.slice(0, 9);
+    state.settings.neoChatPinnedChannels = values;
+    try { localStorage.setItem(pinnedStorageKey(), JSON.stringify(values)); } catch (error) {}
+    await api("/api/me/settings", { method: "PATCH", body: { neoChatPinnedChannels: values } }).catch(function () {});
+  }
+
+  function pinChannel(channelId, beforeId) {
+    channelId = String(channelId || "");
+    beforeId = String(beforeId || "");
+    if (!state.channelMap.has(channelId)) return;
+    var wasPinned = state.pinnedChannelIds.indexOf(channelId) !== -1;
+    if (!wasPinned && state.pinnedChannelIds.length >= 9) {
+      toast("You can pin up to 9 conversations.");
+      return;
+    }
+    state.pinnedChannelIds = state.pinnedChannelIds.filter(function (id) { return id !== channelId; });
+    var beforeIndex = beforeId ? state.pinnedChannelIds.indexOf(beforeId) : -1;
+    if (beforeIndex >= 0) state.pinnedChannelIds.splice(beforeIndex, 0, channelId);
+    else state.pinnedChannelIds.push(channelId);
+    persistPinnedChannels();
+    renderSidebar();
+    toast(wasPinned ? "Pinned chats reordered." : "Conversation pinned.");
+  }
+
+  function unpinChannel(channelId) {
+    channelId = String(channelId || "");
+    if (state.pinnedChannelIds.indexOf(channelId) === -1) return;
+    state.pinnedChannelIds = state.pinnedChannelIds.filter(function (id) { return id !== channelId; });
+    persistPinnedChannels();
+    renderSidebar();
+    toast("Conversation unpinned.");
   }
 
   function unreadCount(channelId) {
@@ -421,30 +481,135 @@
 
   function renderChats(query) {
     var channels = state.channels.filter(function (channel) { return !isHiddenPublicRoom(channel) && channelTitle(channel).toLowerCase().includes(query); });
-    var global = channels.find(function (channel) { return channel.kind === "server" && String(channel.name).toLowerCase() === "general"; });
-    if (global) {
-      el.sidebarContent.appendChild(sectionLabel("Pinned"));
-      el.sidebarContent.appendChild(channelRow(global, true));
+    var pinnedSet = new Set(state.pinnedChannelIds);
+    var pinned = state.pinnedChannelIds.map(function (id) { return state.channelMap.get(id); }).filter(function (channel) {
+      return channel && !isHiddenPublicRoom(channel) && channelTitle(channel).toLowerCase().includes(query);
+    });
+    if (!query || pinned.length) {
+      el.sidebarContent.appendChild(sectionLabel("Pinned · " + state.pinnedChannelIds.length + "/9"));
+      el.sidebarContent.appendChild(pinnedConversationShelf(pinned, query));
     }
-    var rest = channels.filter(function (channel) { return !global || channel.id !== global.id; });
+    var rest = channels.filter(function (channel) { return !pinnedSet.has(String(channel.id)); });
     if (rest.length) {
       el.sidebarContent.appendChild(sectionLabel("Conversations"));
       rest.sort(function (a, b) {
         var am = latestMessage(a.id), bm = latestMessage(b.id);
         return Number(bm && bm.createdAt || b.createdAt || 0) - Number(am && am.createdAt || a.createdAt || 0);
-      }).forEach(function (channel) { el.sidebarContent.appendChild(channelRow(channel, false)); });
+      }).forEach(function (channel) { el.sidebarContent.appendChild(channelRow(channel)); });
     }
-    if (!global && !rest.length) el.sidebarContent.appendChild(emptySidebar("#i-chat", query ? "No conversations match your search." : "No conversations yet."));
+    if (!pinned.length && !rest.length) el.sidebarContent.appendChild(emptySidebar("#i-chat", query ? "No conversations match your search." : "No conversations yet."));
   }
 
-  function channelRow(channel, pinned) {
+  function beginChannelDrag(event, channelId) {
+    state.draggedChannelId = String(channelId || "");
+    event.currentTarget.classList.add("is-dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/x-neo-chat-channel", state.draggedChannelId);
+      event.dataTransfer.setData("text/plain", state.draggedChannelId);
+    }
+  }
+
+  function finishChannelDrag(event) {
+    if (event && event.currentTarget) event.currentTarget.classList.remove("is-dragging");
+    state.draggedChannelId = "";
+    document.querySelectorAll(".pinned-conversation-shelf.is-drop-target, .pinned-conversation.is-drop-before").forEach(function (node) {
+      node.classList.remove("is-drop-target", "is-drop-before");
+    });
+  }
+
+  function draggedChannelId(event) {
+    return String(state.draggedChannelId || event.dataTransfer && (event.dataTransfer.getData("text/x-neo-chat-channel") || event.dataTransfer.getData("text/plain")) || "");
+  }
+
+  function pinnedConversationShelf(channels, query) {
+    var shelf = document.createElement("div");
+    shelf.className = "pinned-conversation-shelf";
+    shelf.setAttribute("aria-label", "Pinned conversations");
+    shelf.addEventListener("dragover", function (event) {
+      if (!state.draggedChannelId) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      shelf.classList.add("is-drop-target");
+    });
+    shelf.addEventListener("dragleave", function (event) {
+      if (!shelf.contains(event.relatedTarget)) shelf.classList.remove("is-drop-target");
+    });
+    shelf.addEventListener("drop", function (event) {
+      event.preventDefault();
+      shelf.classList.remove("is-drop-target");
+      var id = draggedChannelId(event);
+      if (id) pinChannel(id);
+      finishChannelDrag();
+    });
+    channels.forEach(function (channel) { shelf.appendChild(pinnedConversation(channel)); });
+    if (!channels.length && !query) {
+      var hint = document.createElement("div");
+      hint.className = "pinned-conversation-empty";
+      hint.textContent = "Drag a conversation here to pin it";
+      shelf.appendChild(hint);
+    }
+    return shelf;
+  }
+
+  function pinnedConversation(channel) {
     var button = document.createElement("button");
     button.type = "button";
-    button.className = "conversation-row" + (pinned ? " global-row" : "") + (state.activeChannel && state.activeChannel.id === channel.id ? " active" : "");
+    button.className = "pinned-conversation" + (state.activeChannel && state.activeChannel.id === channel.id ? " active" : "");
     button.dataset.channel = channel.id;
+    button.draggable = true;
+    button.setAttribute("aria-label", "Open " + channelTitle(channel));
+    var artwork = document.createElement("span");
+    artwork.className = "pinned-conversation-artwork";
+    var avatar = document.createElement("span");
+    avatar.className = "avatar";
+    var person = channelAvatarUser(channel);
+    if (channel.kind === "server" && String(channel.name).toLowerCase() === "general") paintGlobalAvatar(avatar);
+    else paintAvatar(avatar, person || { username: channel.name, displayName: channel.name }, { large: true });
+    artwork.appendChild(avatar);
+    var unread = unreadCount(channel.id);
+    if (unread > 0 && !state.mutedChannels.has(String(channel.id))) {
+      var badge = document.createElement("b");
+      badge.className = "pinned-conversation-badge";
+      badge.textContent = unread > 99 ? "99+" : String(unread);
+      artwork.appendChild(badge);
+    }
+    var name = document.createElement("span");
+    name.className = "pinned-conversation-name";
+    name.textContent = channelTitle(channel);
+    button.append(artwork, name);
+    button.addEventListener("click", function () { openChannel(channel.id); });
+    button.addEventListener("contextmenu", function (event) { openConversationMenu(event, channel); });
+    button.addEventListener("dragstart", function (event) { beginChannelDrag(event, channel.id); });
+    button.addEventListener("dragend", finishChannelDrag);
+    button.addEventListener("dragover", function (event) {
+      var id = draggedChannelId(event);
+      if (!id || id === String(channel.id)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      button.classList.add("is-drop-before");
+    });
+    button.addEventListener("dragleave", function () { button.classList.remove("is-drop-before"); });
+    button.addEventListener("drop", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      button.classList.remove("is-drop-before");
+      var id = draggedChannelId(event);
+      if (id) pinChannel(id, channel.id);
+      finishChannelDrag();
+    });
+    return button;
+  }
+
+  function channelRow(channel) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "conversation-row" + (channel.kind === "server" && String(channel.name).toLowerCase() === "general" ? " global-row" : "") + (state.activeChannel && state.activeChannel.id === channel.id ? " active" : "");
+    button.dataset.channel = channel.id;
+    button.draggable = true;
     var person = channelAvatarUser(channel);
     var avatar;
-    if (pinned) {
+    if (channel.kind === "server" && String(channel.name).toLowerCase() === "general") {
       avatar = document.createElement("span");
       avatar.className = "avatar";
       paintGlobalAvatar(avatar);
@@ -453,7 +618,7 @@
     var title = document.createElement("span"); title.textContent = channelTitle(channel);
     var preview = document.createElement("small");
     var latest = latestMessage(channel.id);
-    preview.textContent = latest ? (latest.authorId === (state.me && state.me.id) ? "You: " : "") + (latest.text ? displayMessageText(latest.text) : (latest.attachments ? "Attachment" : "Message")) : (pinned ? "Everyone in the community" : channel.kind === "server" ? "Public room" : "Start a conversation");
+    preview.textContent = latest ? (latest.authorId === (state.me && state.me.id) ? "You: " : "") + (latest.text ? displayMessageText(latest.text) : (latest.attachments ? "Attachment" : "Message")) : (channel.kind === "server" && String(channel.name).toLowerCase() === "general" ? "Everyone in the community" : channel.kind === "server" ? "Public room" : "Start a conversation");
     copy.append(title, preview);
     var meta = document.createElement("span"); meta.className = "row-meta";
     var time = document.createElement("time"); time.textContent = latest ? formatTime(latest.createdAt) : ""; meta.appendChild(time);
@@ -466,6 +631,9 @@
     }
     button.append(avatar, copy, meta);
     button.addEventListener("click", function () { openChannel(channel.id); });
+    button.addEventListener("contextmenu", function (event) { openConversationMenu(event, channel); });
+    button.addEventListener("dragstart", function (event) { beginChannelDrag(event, channel.id); });
+    button.addEventListener("dragend", finishChannelDrag);
     return button;
   }
 
@@ -527,6 +695,7 @@
     await loadBlinkChannels();
     state.channelMap = new Map(state.channels.map(function (channel) { return [channel.id, channel]; }));
     loadMutedChannels();
+    loadPinnedChannels();
     loadProfile();
     updateMe();
     updateRequestBadge();
@@ -1076,6 +1245,71 @@
     el.videoCallButton.addEventListener("click", function () { toast("Video calls need the server's DM calling endpoint."); });
     window.addEventListener("online", function () { setConnection("Live", true); connectSocket(); });
     window.addEventListener("offline", function () { setConnection("Offline", false); });
+  }
+
+  async function markChannelRead(channel) {
+    var latest = latestMessage(channel.id);
+    var stamp = Number(latest && latest.createdAt || Date.now());
+    if (channel.backend === "blink") rememberBlinkRead(channel.id, stamp);
+    else {
+      state.unreads[channel.id] = stamp;
+      await api("/api/channels/" + encodeURIComponent(channel.id) + "/read", { method: "POST", body: {} }).catch(function () {});
+    }
+    renderSidebar();
+    toast("Conversation marked as read.");
+  }
+
+  function toggleChannelMuted(channel) {
+    var id = String(channel.id);
+    var muted = state.mutedChannels.has(id);
+    if (muted) state.mutedChannels.delete(id);
+    else state.mutedChannels.add(id);
+    persistMutedChannels();
+    renderSidebar();
+    toast(muted ? "Notifications unmuted." : "Notifications muted.");
+  }
+
+  function conversationMenuButton(label, action, disabled) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.setAttribute("role", "menuitem");
+    button.disabled = Boolean(disabled);
+    button.addEventListener("click", function () {
+      closeMessageActionMenu();
+      action();
+    });
+    return button;
+  }
+
+  function openConversationMenu(event, channel) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeMessageActionMenu();
+    var id = String(channel.id);
+    var pinned = state.pinnedChannelIds.indexOf(id) !== -1;
+    var muted = state.mutedChannels.has(id);
+    var menu = document.createElement("div");
+    menu.className = "message-action-menu conversation-action-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", channelTitle(channel) + " options");
+    menu.append(
+      conversationMenuButton("Open", function () { openChannel(channel.id); }),
+      conversationMenuButton(pinned ? "Unpin" : "Pin", function () { if (pinned) unpinChannel(id); else pinChannel(id); }, !pinned && state.pinnedChannelIds.length >= 9),
+      conversationMenuButton("Mark as read", function () { markChannelRead(channel); }, unreadCount(id) < 1),
+      conversationMenuButton(muted ? "Unmute notifications" : "Mute notifications", function () { toggleChannelMuted(channel); })
+    );
+    document.body.appendChild(menu);
+    state.actionMenu = menu;
+    var left = Math.min(window.innerWidth - menu.offsetWidth - 10, Math.max(10, event.clientX));
+    var top = Math.min(window.innerHeight - menu.offsetHeight - 10, Math.max(10, event.clientY));
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+    requestAnimationFrame(function () {
+      menu.classList.add("visible");
+      var first = menu.querySelector("button:not(:disabled)");
+      if (first) first.focus();
+    });
   }
 
   async function handleMessageAction(event) {
