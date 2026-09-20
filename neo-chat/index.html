@@ -8,7 +8,7 @@
   <link rel="icon" href="../assets/imessage-logo.png?v=20260908-imessage-logo-v2">
   <link rel="apple-touch-icon" href="../assets/imessage-logo.png?v=20260908-imessage-logo-v2">
   <link rel="stylesheet" href="../neo-theme-system.css?v=20260919-neo-sync-v1">
-  <link rel="stylesheet" href="./styles.css?v=20260920-imessage-fidelity-v1">
+  <link rel="stylesheet" href="./styles.css?v=20260920-imessage-fidelity-v1&amp;gifs=multi-provider-v1">
   <script src="../neo-ad-shield.js?v=20260919-neo-sync-v1"></script>
 </head>
 <body>
@@ -102,13 +102,44 @@
 
         <form class="composer" id="composer">
           <input id="fileInput" type="file" accept="image/*,.pdf,.txt,.zip" hidden>
-          <button class="composer-tool" id="attachButton" type="button" aria-label="Add a photo or file"><svg><use href="#i-plus"></use></svg></button>
+          <button class="composer-tool" id="attachButton" type="button" aria-label="Add an attachment" aria-haspopup="menu" aria-controls="attachmentMenu" aria-expanded="false"><svg><use href="#i-plus"></use></svg></button>
           <div class="composer-field">
             <textarea id="messageInput" rows="1" maxlength="4000" placeholder="Message" aria-label="Message"></textarea>
             <button class="composer-tool emoji-button" id="emojiButton" type="button" aria-label="Choose emoji"><svg><use href="#i-smile"></use></svg></button>
           </div>
           <button class="send-button" id="sendButton" type="submit" aria-label="Send message" disabled><svg><use href="#i-send"></use></svg></button>
         </form>
+        <div class="attachment-menu" id="attachmentMenu" role="menu" aria-label="Add to message" hidden>
+          <button id="attachFileButton" type="button" role="menuitem">
+            <span class="attachment-menu-icon"><svg><use href="#i-paperclip"></use></svg></span>
+            <span><strong>Photos &amp; Files</strong><small>Choose something from this device</small></span>
+          </button>
+          <button id="attachGifButton" type="button" role="menuitem">
+            <span class="attachment-menu-icon gif-mark">GIF</span>
+            <span><strong>Search GIFs</strong><small>Search providers or paste any GIF link</small></span>
+          </button>
+        </div>
+        <section class="gif-picker" id="gifPicker" aria-label="GIF picker" hidden>
+          <header class="gif-picker-header">
+            <span><strong>GIFs</strong><small>Find the perfect reaction</small></span>
+            <button class="icon-button" id="gifCloseButton" type="button" aria-label="Close GIF picker"><svg><use href="#i-close"></use></svg></button>
+          </header>
+          <form class="gif-search" id="gifSearchForm" role="search">
+            <svg><use href="#i-search"></use></svg>
+            <input id="gifSearchInput" type="search" autocomplete="off" placeholder="Search GIFs" aria-label="Search GIFs">
+          </form>
+          <div class="gif-provider-tabs" id="gifProviderTabs" aria-label="GIF sources">
+            <button class="active" type="button" data-gif-provider="all" aria-pressed="true">All sources</button>
+            <button type="button" data-gif-provider="gifsnap" aria-pressed="false">GIF search</button>
+            <button type="button" data-gif-provider="commons" aria-pressed="false">Commons</button>
+          </div>
+          <div class="gif-results" id="gifResults" aria-live="polite"></div>
+          <form class="gif-url-form" id="gifUrlForm">
+            <input id="gifUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="Paste a GIF link from any provider" aria-label="GIF URL">
+            <button type="submit">Add</button>
+          </form>
+          <small class="gif-picker-note">Searches multiple GIF sources. Direct links work with any HTTPS provider that allows media downloads.</small>
+        </section>
         <div class="emoji-popover" id="emojiPopover" hidden aria-label="Emoji picker"></div>
       </div>
     </section>
@@ -165,6 +196,6 @@
   <script src="../neo-chat-transport.js?v=20260919-deployment-chat-v2"></script>
   <script src="../neo-app-theme.js?v=20260919-neo-sync-v1"></script>
   <script src="./neo-os-bridge.js?v=20260919-contrast-safe-v2"></script>
-  <script src="./app.js?v=20260920-imessage-fidelity-v1" defer></script>
+  <script src="./app.js?v=20260920-imessage-fidelity-v1&amp;gifs=multi-provider-v1" defer></script>
 </body>
 </html>

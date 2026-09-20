@@ -40,6 +40,11 @@
     typingTimer: 0,
     typingClearTimer: 0,
     pollTimer: 0,
+    gifProvider: "all",
+    gifSearchTimer: 0,
+    gifRequestSerial: 0,
+    gifAbortController: null,
+    attachmentMenuTimer: 0,
     replyTo: null,
     attachment: null,
     authMode: "login",
@@ -54,8 +59,9 @@
     "searchInput","sidebarContent","requestBadge","emptyState","emptyStartButton","chatView","backButton",
     "headerPerson","chatAvatar","chatTitle","chatSubtitle","audioCallButton","videoCallButton","infoButton",
     "messageScroll","typingLine","replyStrip","replyLabel","cancelReplyButton","attachmentStrip","attachmentPreview",
-    "attachmentName","attachmentSize","cancelAttachmentButton","composer","fileInput","attachButton","messageInput",
-    "emojiButton","emojiPopover","sendButton","detailsPanel","detailsClose","detailsAvatar","detailsName",
+    "attachmentName","attachmentSize","cancelAttachmentButton","composer","fileInput","attachButton","attachmentMenu",
+    "attachFileButton","attachGifButton","gifPicker","gifCloseButton","gifSearchForm","gifSearchInput","gifProviderTabs",
+    "gifResults","gifUrlForm","gifUrlInput","messageInput","emojiButton","emojiPopover","sendButton","detailsPanel","detailsClose","detailsAvatar","detailsName",
     "detailsStatus","detailsActions","authOverlay","authForm","authTitle","authUsername","authPassword",
     "authFeedback","authSubmit","profileOverlay","profileForm","profileTitle","profileFile",
     "profileDisplayName","profileFeedback","profileCancel","logoutButton","memojiPersonalizer","memojiPreview","memojiOptionGrid","newChatOverlay","peopleSearch","peopleList","toastRegion"
@@ -946,9 +952,10 @@
     attachments.forEach(function (attachment) {
       if (!attachment) return;
       var data = attachment.data || attachment.url || "";
+      var preview = attachment.data || attachment.previewUrl || data;
       if (String(attachment.type || "").startsWith("image/") && data) {
         var link = document.createElement("a"); link.className = "message-attachment"; link.href = data; link.target = "_blank"; link.rel = "noopener";
-        var image = document.createElement("img"); image.src = data; image.alt = attachment.name || "Image attachment"; link.appendChild(image); bubble.appendChild(link);
+        var image = document.createElement("img"); image.src = preview; image.alt = attachment.name || "Image attachment"; link.appendChild(image); bubble.appendChild(link);
       } else if (data) {
         var file = document.createElement("a"); file.className = "message-attachment file-attachment"; file.href = data; file.download = attachment.name || "attachment"; file.textContent = "📎 " + (attachment.name || "Attachment"); bubble.appendChild(file);
       }
@@ -1024,6 +1031,182 @@
       };
       image.onerror = reject; image.src = source;
     });
+  }
+
+  function closeAttachmentMenu() {
+    window.clearTimeout(state.attachmentMenuTimer);
+    el.attachmentMenu.hidden = true;
+    el.attachButton.setAttribute("aria-expanded", "false");
+  }
+
+  function showAttachmentMenu() {
+    window.clearTimeout(state.attachmentMenuTimer);
+    el.attachmentMenu.hidden = false;
+    el.attachButton.setAttribute("aria-expanded", "true");
+  }
+
+  function scheduleAttachmentMenuClose() {
+    window.clearTimeout(state.attachmentMenuTimer);
+    state.attachmentMenuTimer = window.setTimeout(function () {
+      if (!el.attachmentMenu.matches(":hover") && !el.attachButton.matches(":hover")) closeAttachmentMenu();
+    }, 180);
+  }
+
+  function closeGifPicker() {
+    el.gifPicker.hidden = true;
+    if (state.gifAbortController) state.gifAbortController.abort();
+    state.gifAbortController = null;
+  }
+
+  function openGifPicker() {
+    closeAttachmentMenu();
+    el.emojiPopover.hidden = true;
+    el.gifPicker.hidden = false;
+    window.setTimeout(function () { el.gifSearchInput.focus(); }, 0);
+    if (!el.gifResults.children.length) searchGifs(el.gifSearchInput.value || "reaction");
+  }
+
+  function gifResult(id, title, url, previewUrl, provider, sourceUrl) {
+    return {
+      id: String(id || url || Math.random()),
+      title: String(title || "GIF").trim() || "GIF",
+      url: String(url || ""),
+      previewUrl: String(previewUrl || url || ""),
+      provider: String(provider || "GIF"),
+      sourceUrl: String(sourceUrl || url || "")
+    };
+  }
+
+  async function searchGifSnap(query, signal) {
+    var url = new URL("https://gifsnap.com/api/v1/gifs/search");
+    url.searchParams.set("q", query);
+    url.searchParams.set("page", "1");
+    url.searchParams.set("limit", "24");
+    var response = await fetch(url, { signal: signal, cache: "no-store" });
+    if (!response.ok) throw new Error("GIF search is unavailable");
+    var payload = await response.json();
+    return (Array.isArray(payload.data) ? payload.data : []).map(function (item) {
+      return gifResult(item.id, item.title, item.url, item.preview_url, item.source || "GIF search", item.url);
+    }).filter(function (item) { return /^https:\/\//i.test(item.url); });
+  }
+
+  async function searchCommonsGifs(query, signal) {
+    var url = new URL("https://commons.wikimedia.org/w/api.php");
+    url.searchParams.set("action", "query");
+    url.searchParams.set("generator", "search");
+    url.searchParams.set("gsrsearch", query + " filemime:image/gif");
+    url.searchParams.set("gsrnamespace", "6");
+    url.searchParams.set("gsrlimit", "18");
+    url.searchParams.set("prop", "imageinfo");
+    url.searchParams.set("iiprop", "url|mime|size");
+    url.searchParams.set("iiurlwidth", "360");
+    url.searchParams.set("format", "json");
+    url.searchParams.set("origin", "*");
+    var response = await fetch(url, { signal: signal, cache: "no-store" });
+    if (!response.ok) throw new Error("Commons GIF search is unavailable");
+    var payload = await response.json();
+    return Object.values(payload && payload.query && payload.query.pages || {}).map(function (page) {
+      var info = page && page.imageinfo && page.imageinfo[0] || {};
+      return gifResult(page.pageid, String(page.title || "GIF").replace(/^File:/i, ""), info.url, info.thumburl || info.url, "Wikimedia Commons", info.descriptionurl || info.url);
+    }).filter(function (item) { return /^https:\/\//i.test(item.url); });
+  }
+
+  function gifStatus(message, busy) {
+    el.gifResults.replaceChildren();
+    var status = document.createElement("div");
+    status.className = "gif-results-status" + (busy ? " is-loading" : "");
+    if (busy) status.appendChild(document.createElement("i"));
+    var copy = document.createElement("span"); copy.textContent = message; status.appendChild(copy);
+    el.gifResults.appendChild(status);
+  }
+
+  async function remoteGifAttachment(result) {
+    var url = String(result && result.url || "").trim();
+    if (!/^https:\/\//i.test(url)) throw new Error("Use a secure HTTPS GIF link");
+    var response = await fetch(url, { cache: "no-store", mode: "cors", referrerPolicy: "no-referrer" });
+    if (!response.ok) throw new Error("That GIF could not be downloaded");
+    var blob = await response.blob();
+    var type = String(blob.type || "").split(";")[0].toLowerCase();
+    if (type !== "image/gif" && type !== "image/webp") throw new Error("That link is not a GIF or animated WebP");
+    if (blob.size > 2.2 * 1024 * 1024) throw new Error("Choose a GIF under 2 MB");
+    var data = await readFileData(blob);
+    var safeTitle = String(result.title || "GIF").replace(/[\\/:*?"<>|\x00-\x1f]/g, " ").trim().slice(0, 82) || "GIF";
+    return { name: safeTitle + (type === "image/gif" ? ".gif" : ".webp"), type: type, size: blob.size, data: data };
+  }
+
+  async function chooseGif(result, button) {
+    if (button) button.classList.add("is-selecting");
+    try {
+      state.attachment = await remoteGifAttachment(result);
+      syncComposeExtras();
+      closeGifPicker();
+      el.messageInput.focus();
+    } catch (error) {
+      toast(error.message || "Could not add that GIF");
+    } finally {
+      if (button) button.classList.remove("is-selecting");
+    }
+  }
+
+  function renderGifResults(results, query) {
+    el.gifResults.replaceChildren();
+    var seen = new Set();
+    results.filter(function (item) {
+      var key = String(item.url || "").replace(/[?#].*$/, "");
+      if (!key || seen.has(key)) return false;
+      seen.add(key); return true;
+    }).slice(0, 36).forEach(function (item) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "gif-result";
+      button.title = item.title + " · " + item.provider;
+      button.setAttribute("aria-label", "Add " + item.title + " from " + item.provider);
+      var image = document.createElement("img");
+      image.src = item.previewUrl;
+      image.alt = item.title;
+      image.loading = "lazy";
+      image.referrerPolicy = "no-referrer";
+      var source = document.createElement("span"); source.textContent = item.provider;
+      button.append(image, source);
+      button.addEventListener("click", function () { chooseGif(item, button); });
+      el.gifResults.appendChild(button);
+    });
+    if (!el.gifResults.children.length) gifStatus("No GIFs found for “" + query + "”. Try another search or paste a link.", false);
+  }
+
+  async function searchGifs(value) {
+    var query = String(value || "").trim().slice(0, 80) || "reaction";
+    var serial = ++state.gifRequestSerial;
+    if (state.gifAbortController) state.gifAbortController.abort();
+    state.gifAbortController = new AbortController();
+    gifStatus("Searching GIFs…", true);
+    try {
+      var searches = [];
+      if (state.gifProvider === "all" || state.gifProvider === "gifsnap") searches.push(searchGifSnap(query, state.gifAbortController.signal));
+      if (state.gifProvider === "all" || state.gifProvider === "commons") searches.push(searchCommonsGifs(query, state.gifAbortController.signal));
+      var settled = await Promise.allSettled(searches);
+      if (serial !== state.gifRequestSerial) return;
+      var results = settled.reduce(function (all, entry) { return entry.status === "fulfilled" ? all.concat(entry.value) : all; }, []);
+      renderGifResults(results, query);
+      if (!results.length && settled.every(function (entry) { return entry.status === "rejected"; })) toast("GIF providers are temporarily unavailable");
+    } catch (error) {
+      if (error.name !== "AbortError" && serial === state.gifRequestSerial) gifStatus("GIF search is temporarily unavailable. You can still paste a direct link.", false);
+    }
+  }
+
+  function queueGifSearch() {
+    window.clearTimeout(state.gifSearchTimer);
+    state.gifSearchTimer = window.setTimeout(function () { searchGifs(el.gifSearchInput.value); }, 280);
+  }
+
+  function setGifProvider(provider) {
+    state.gifProvider = provider === "gifsnap" || provider === "commons" ? provider : "all";
+    el.gifProviderTabs.querySelectorAll("[data-gif-provider]").forEach(function (button) {
+      var active = button.dataset.gifProvider === state.gifProvider;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    searchGifs(el.gifSearchInput.value);
   }
 
   function subscribe(channelId) {
@@ -1328,16 +1511,41 @@
     el.composer.addEventListener("submit", sendMessage);
     el.messageInput.addEventListener("input", function () { autoSizeComposer(); syncSendButton(); sendTyping(); });
     el.messageInput.addEventListener("keydown", function (event) { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!el.sendButton.disabled) el.composer.requestSubmit(); } });
-    el.attachButton.addEventListener("click", function () { el.fileInput.click(); });
+    el.attachButton.addEventListener("pointerenter", showAttachmentMenu);
+    el.attachButton.addEventListener("pointerleave", scheduleAttachmentMenuClose);
+    el.attachButton.addEventListener("click", showAttachmentMenu);
+    el.attachmentMenu.addEventListener("pointerenter", showAttachmentMenu);
+    el.attachmentMenu.addEventListener("pointerleave", scheduleAttachmentMenuClose);
+    el.attachFileButton.addEventListener("click", function () { closeAttachmentMenu(); el.fileInput.click(); });
+    el.attachGifButton.addEventListener("click", openGifPicker);
+    el.gifCloseButton.addEventListener("click", closeGifPicker);
+    el.gifSearchForm.addEventListener("submit", function (event) { event.preventDefault(); searchGifs(el.gifSearchInput.value); });
+    el.gifSearchInput.addEventListener("input", queueGifSearch);
+    el.gifProviderTabs.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-gif-provider]");
+      if (button) setGifProvider(button.dataset.gifProvider);
+    });
+    el.gifUrlForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var url = el.gifUrlInput.value.trim();
+      if (!url) return;
+      chooseGif(gifResult(url, "Shared GIF", url, url, "Direct link", url));
+    });
     el.fileInput.addEventListener("change", async function () { try { state.attachment = await fileToAttachment(el.fileInput.files[0]); syncComposeExtras(); } catch (error) { toast(error.message); } el.fileInput.value = ""; });
     el.cancelAttachmentButton.addEventListener("click", function () { state.attachment = null; syncComposeExtras(); });
     el.cancelReplyButton.addEventListener("click", function () { state.replyTo = null; syncComposeExtras(); });
     el.emojiButton.addEventListener("click", function () { el.emojiPopover.hidden = !el.emojiPopover.hidden; });
     document.addEventListener("pointerdown", function (event) { if (!el.emojiPopover.hidden && !event.target.closest("#emojiPopover, #emojiButton")) el.emojiPopover.hidden = true; });
+    document.addEventListener("pointerdown", function (event) {
+      if (!el.attachmentMenu.hidden && !event.target.closest("#attachmentMenu, #attachButton")) closeAttachmentMenu();
+      if (!el.gifPicker.hidden && !event.target.closest("#gifPicker, #attachButton")) closeGifPicker();
+    });
     document.addEventListener("pointerdown", function (event) { if (state.actionMenu && !event.target.closest(".message-action-menu, [data-action=more]")) closeMessageActionMenu(); });
     document.addEventListener("keydown", function (event) {
       if (event.key !== "Escape") return;
       closeMessageActionMenu();
+      closeAttachmentMenu();
+      closeGifPicker();
       if (!el.newChatOverlay.hidden) {
         hideOverlay(el.newChatOverlay);
         window.setTimeout(function () { el.composeButton.focus(); }, 0);
