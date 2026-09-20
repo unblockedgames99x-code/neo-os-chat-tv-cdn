@@ -223,8 +223,6 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-lineca
 .primary-button:disabled { opacity: .55; cursor: wait; }
 .primary-button.full { width: 100%; margin-top: 5px; }
 .ghost-button { color: var(--muted); background: var(--surface-2); }
-.server-note { margin: 15px 0 0; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 9px; }
-.server-note span { width: 6px; height: 6px; border-radius: 50%; background: #31c85a; box-shadow: 0 0 0 3px rgba(49,200,90,.12); }
 .modal-intro { margin: 9px 0 17px; color: var(--muted); font-size: 11px; }
 .memoji-studio { margin: 0 0 13px; padding: 12px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-2); }
 .memoji-stage { height: 112px; display: grid; place-items: center; border-radius: 14px; background: radial-gradient(circle at 50% 36%, rgba(255,255,255,.08), transparent 62%); }
