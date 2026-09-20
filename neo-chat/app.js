@@ -309,7 +309,7 @@
   function paintAvatar(node, user, options) {
     options = options || {};
     node.replaceChildren();
-    node.classList.remove("has-memoji", "has-tapback");
+    node.classList.remove("has-memoji", "has-tapback", "is-global");
     node.style.removeProperty("--memoji-background");
     var isMe = state.me && user && user.id === state.me.id;
     var profile = isMe ? state.profile : null;
@@ -336,6 +336,16 @@
     var label = cleanDisplayName(user);
     node.textContent = (label[0] || "?").toUpperCase();
     node.style.fontSize = "";
+  }
+
+  function paintGlobalAvatar(node) {
+    node.replaceChildren();
+    node.classList.remove("has-memoji", "has-tapback");
+    node.classList.add("is-global");
+    node.style.removeProperty("--memoji-background");
+    node.style.setProperty("--avatar-hue", "209");
+    node.style.fontSize = "";
+    node.innerHTML = '<svg aria-hidden="true"><use href="#i-globe"></use></svg>';
   }
 
   function setConnection(label, online) {
@@ -437,7 +447,7 @@
     if (pinned) {
       avatar = document.createElement("span");
       avatar.className = "avatar";
-      avatar.innerHTML = '<svg><use href="#i-globe"></use></svg>';
+      paintGlobalAvatar(avatar);
     } else avatar = createAvatar(person || { username: channel.name, displayName: channel.name });
     var copy = document.createElement("span"); copy.className = "row-copy";
     var title = document.createElement("span"); title.textContent = channelTitle(channel);
@@ -613,7 +623,7 @@
     el.chatTitle.textContent = channelTitle(channel);
     el.chatSubtitle.textContent = channel.kind === "server" ? (String(channel.name).toLowerCase() === "general" ? "Global room · everyone in the community" : "Public room") : (person && state.online.has(person.id) ? "Online" : "Direct message");
     if (channel.kind === "server" && String(channel.name).toLowerCase() === "general") {
-      el.chatAvatar.replaceChildren(); el.chatAvatar.innerHTML = '<svg><use href="#i-globe"></use></svg>'; el.chatAvatar.style.setProperty("--avatar-hue", "209");
+      paintGlobalAvatar(el.chatAvatar);
     } else paintAvatar(el.chatAvatar, person || { username: channel.name, displayName: channel.name });
     var dm = channel.kind === "dm";
     el.audioCallButton.hidden = !dm;
@@ -886,9 +896,12 @@
   function openDetails() {
     if (!state.activeChannel) return;
     var person = channelAvatarUser(state.activeChannel);
+    var isGlobal = state.activeChannel.kind === "server" && String(state.activeChannel.name).toLowerCase() === "general";
     el.detailsName.textContent = channelTitle(state.activeChannel);
     el.detailsStatus.textContent = state.activeChannel.kind === "server" ? "Public community room" : (person && state.online.has(person.id) ? "Online" : "Direct message");
-    if (person) paintAvatar(el.detailsAvatar, person, { large: true }); else paintAvatar(el.detailsAvatar, { username: state.activeChannel.name, displayName: state.activeChannel.name }, { large: true });
+    if (isGlobal) paintGlobalAvatar(el.detailsAvatar);
+    else if (person) paintAvatar(el.detailsAvatar, person, { large: true });
+    else paintAvatar(el.detailsAvatar, { username: state.activeChannel.name, displayName: state.activeChannel.name }, { large: true });
     el.detailsActions.replaceChildren();
     if (person) {
       var add = document.createElement("button"); add.type = "button"; add.textContent = "Add friend"; add.addEventListener("click", function () { sendFriendRequest(person); }); el.detailsActions.appendChild(add);
