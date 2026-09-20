@@ -199,6 +199,34 @@
     } };
   }
 
+  async function editMessage(messageId, body) {
+    var active = activeAccount();
+    if (!active) throw Object.assign(new Error("Sign in to edit messages."), { status: 401 });
+    if (!transport.edit) throw new Error("Message editing is unavailable in this NEO build.");
+    var payload = await transport.edit(active.token, String(messageId || ""), String(body.text || ""));
+    snapshotPromise = null;
+    var message = payload && payload.message || {};
+    var attachment = message.attachment || null;
+    return { message: {
+      id: String(message.id || messageId),
+      authorId: String(message.userId || active.user.id),
+      text: String(message.text || ""),
+      createdAt: Number(message.time || message.createdAt || Date.now()),
+      editedAt: Number(message.editedAt || Date.now()),
+      replyTo: message.replyTo || null,
+      attachments: attachment ? [attachment] : (Array.isArray(message.attachments) ? message.attachments : [])
+    } };
+  }
+
+  async function deleteMessage(messageId) {
+    var active = activeAccount();
+    if (!active) throw Object.assign(new Error("Sign in to delete messages."), { status: 401 });
+    if (!transport.remove) throw new Error("Message deletion is unavailable in this NEO build.");
+    var payload = await transport.remove(active.token, String(messageId || ""));
+    snapshotPromise = null;
+    return { id: String(payload && payload.id || messageId), roomId: String(payload && payload.roomId || ""), deleted: true };
+  }
+
   async function api(path, options) {
     options = options || {};
     var method = String(options.method || "GET").toUpperCase();
@@ -265,12 +293,16 @@
       if (method === "POST") return sendMessage(roomId, body);
       return { messages: messageRows(payload, roomId) };
     }
+    if ((match = path.match(/^\/api\/messages\/([^/]+)$/))) {
+      var messageId = decodeURIComponent(match[1]);
+      if (method === "PATCH") return editMessage(messageId, body);
+      if (method === "DELETE") return deleteMessage(messageId);
+    }
     if (path === "/api/users/me" && method === "PATCH") {
       var updated = Object.assign({}, payload.account, { displayName: String(body.displayName || payload.account.displayName) });
       return { user: updated };
     }
     if (/^\/api\/friends\/requests/.test(path)) return { ok: true };
-    if (/^\/api\/messages\//.test(path)) throw new Error("Editing and deleting shared NEO messages is not available yet.");
     throw Object.assign(new Error("That NEO Chat action is unavailable."), { status: 404 });
   }
 
