@@ -900,7 +900,7 @@
     list.forEach(function (message, index) {
       var date = new Date(Number(message.createdAt || Date.now()));
       if (!previous || new Date(Number(previous.createdAt || 0)).toDateString() !== date.toDateString()) {
-        var divider = document.createElement("div"); divider.className = "day-divider"; divider.textContent = formatDay(message.createdAt); el.messageScroll.appendChild(divider);
+        var divider = document.createElement("div"); divider.className = "day-divider"; divider.textContent = formatDay(message.createdAt) + " " + formatTime(message.createdAt); el.messageScroll.appendChild(divider);
       }
       var next = list[index + 1];
       var start = !previous || previous.authorId !== message.authorId || Number(message.createdAt) - Number(previous.createdAt) > 300000;
