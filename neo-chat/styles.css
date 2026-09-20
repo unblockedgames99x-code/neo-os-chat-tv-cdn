@@ -1053,8 +1053,10 @@ button:focus-visible { outline: 3px solid rgba(var(--accent-rgb),.35); outline-o
 }
 .pinned-conversation-badge {
   position: absolute;
-  top: -2px;
-  right: -2px;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  box-sizing: border-box;
   min-width: 19px;
   height: 19px;
   padding: 0 5px;
@@ -1066,6 +1068,8 @@ button:focus-visible { outline: 3px solid rgba(var(--accent-rgb),.35); outline-o
   background: var(--messages-blue);
   font-size: 9px;
   font-weight: 760;
+  line-height: 1;
+  transform: translate(55%, -45%);
 }
 .pinned-conversation-empty {
   grid-column: 1 / -1;
