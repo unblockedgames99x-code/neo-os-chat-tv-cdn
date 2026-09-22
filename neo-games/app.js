@@ -6,9 +6,6 @@
   var imageBatchSize = Math.max(1, Number(config.imageBatchSize) || 8);
   var searchDelay = Math.max(100, Number(config.searchDelay) || 300);
   var providerLabel = String(config.providerLabel || "Fern");
-  var aetherConfig = config.aether || {};
-  var gnMathConfig = config.gnMath || {};
-  var staticQuasarConfig = config.staticQuasar || {};
   var favoritesKey = "neo_games_fern_favorites_v1";
   var statsKey = "neo_games_fern_stats_v1";
   var recentKey = "neo_games_fern_recent_v1";
@@ -23,15 +20,6 @@
     fernError: "",
     fernTotal: 0,
     fernPages: 1,
-    aetherReady: false,
-    aetherError: "",
-    aetherCatalog: [],
-    gnMathReady: false,
-    gnMathError: "",
-    gnMathCatalog: [],
-    staticQuasarReady: false,
-    staticQuasarError: "",
-    staticQuasarCatalog: [],
     loading: false,
     failed: false,
     games: [],
@@ -112,168 +100,6 @@
       imageToken: cleanText(raw.image_token || raw.imageToken || raw.image, ""),
       raw: raw
     };
-  }
-
-  function aetherUrl(value, fallbackPath) {
-    var base = safeUrl(aetherConfig.base) || "https://gn-local.booksforschool.online/";
-    var text = cleanText(value, fallbackPath || "")
-      .replace(/\{COVER_URL\}/g, cleanText(aetherConfig.coverBase, "offline/covers/").replace(/\/$/, ""))
-      .replace(/\{HTML_URL\}/g, cleanText(aetherConfig.gameBase, "offline/html/").replace(/\/$/, ""));
-    try { return new URL(text, base).href; } catch (_error) { return ""; }
-  }
-
-  function normalizeAetherGame(raw, index) {
-    raw = raw || {};
-    var sourceId = cleanText(raw.id, String(index));
-    var image = aetherUrl(raw.cover, cleanText(aetherConfig.coverBase, "offline/covers/") + sourceId + ".png");
-    var launchUrl = aetherUrl(raw.url, cleanText(aetherConfig.gameBase, "offline/html/") + sourceId + ".html");
-    if (!launchUrl) return null;
-    return {
-      id: "aether/" + sourceId,
-      sourceId: sourceId,
-      name: cleanText(raw.name || raw.title, "Untitled game"),
-      category: cleanText(raw.category || raw.author, "Game"),
-      provider: "Aether",
-      image: image,
-      launchUrl: launchUrl,
-      isAether: true,
-      raw: raw
-    };
-  }
-
-  async function loadAetherCatalog() {
-    var catalogUrl = aetherUrl(aetherConfig.catalog, "offline/catalog.json");
-    if (!catalogUrl) throw new Error("The Aether catalog URL is invalid");
-    var fetcher = window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.fetch === "function"
-      ? window.NEO_PROXY_CLIENT.fetch.bind(window.NEO_PROXY_CLIENT)
-      : window.fetch.bind(window);
-    var response = await fetcher(catalogUrl, { cache: "no-store", credentials: "omit" });
-    if (!response.ok) throw new Error("Aether returned " + response.status);
-    var payload = await response.json();
-    var rows = Array.isArray(payload) ? payload : Array.isArray(payload && payload.games) ? payload.games : [];
-    var games = rows.map(normalizeAetherGame).filter(Boolean);
-    if (!games.length) throw new Error("The Aether catalog is empty");
-    state.aetherCatalog = games;
-    state.aetherReady = true;
-    state.aetherError = "";
-    games.forEach(function (game) { state.gameMap.set(game.id, game); });
-    return games;
-  }
-
-  function filteredAetherGames(query) {
-    var needle = cleanText(query, "").toLowerCase();
-    if (!needle) return state.aetherCatalog.slice();
-    return state.aetherCatalog.filter(function (game) {
-      return (game.name + " " + game.category + " " + cleanText(game.raw && game.raw.author, "")).toLowerCase().indexOf(needle) !== -1;
-    });
-  }
-
-  function gnMathUrl(value, fallbackPath) {
-    var text = cleanText(value, fallbackPath || "")
-      .replace(/\{COVER_URL\}/g, cleanText(gnMathConfig.coverBase, "https://cdn.jsdelivr.net/gh/freebuisness/covers@main/").replace(/\/$/, ""))
-      .replace(/\{HTML_URL\}/g, cleanText(gnMathConfig.gameBase, "https://cdn.jsdelivr.net/gh/freebuisness/html@main/").replace(/\/$/, ""));
-    return safeUrl(text);
-  }
-
-  function normalizeGnMathGame(raw, index) {
-    raw = raw || {};
-    var sourceId = cleanText(raw.id, String(index));
-    if (Number(sourceId) < 0) return null;
-    var image = gnMathUrl(raw.cover, cleanText(gnMathConfig.coverBase, "") + sourceId + ".png");
-    var launchUrl = gnMathUrl(raw.url, cleanText(gnMathConfig.gameBase, "") + sourceId + ".html");
-    if (!launchUrl) return null;
-    var tags = Array.isArray(raw.special) ? raw.special.map(function (tag) { return cleanText(tag, ""); }).filter(Boolean) : [];
-    return {
-      id: "gn-math/" + sourceId,
-      sourceId: sourceId,
-      name: cleanText(raw.name || raw.title, "Untitled game"),
-      category: tags.length ? tags.join(" · ") : "Game",
-      provider: "GN Math",
-      image: image,
-      launchUrl: launchUrl,
-      isGnMath: true,
-      raw: raw
-    };
-  }
-
-  async function loadGnMathCatalog() {
-    var catalogUrl = safeUrl(gnMathConfig.catalog);
-    if (!catalogUrl) throw new Error("The GN Math catalog URL is invalid");
-    var fetcher = window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.fetch === "function"
-      ? window.NEO_PROXY_CLIENT.fetch.bind(window.NEO_PROXY_CLIENT)
-      : window.fetch.bind(window);
-    var response = await fetcher(catalogUrl, { cache: "no-store", credentials: "omit" });
-    if (!response.ok) throw new Error("GN Math returned " + response.status);
-    var payload = await response.json();
-    var rows = Array.isArray(payload) ? payload : Array.isArray(payload && payload.games) ? payload.games : [];
-    var games = rows.map(normalizeGnMathGame).filter(Boolean);
-    if (!games.length) throw new Error("The GN Math catalog is empty");
-    state.gnMathCatalog = games;
-    state.gnMathReady = true;
-    state.gnMathError = "";
-    games.forEach(function (game) { state.gameMap.set(game.id, game); });
-    return games;
-  }
-
-  function filteredGnMathGames(query) {
-    var needle = cleanText(query, "").toLowerCase();
-    if (!needle) return state.gnMathCatalog.slice();
-    return state.gnMathCatalog.filter(function (game) {
-      return (game.name + " " + game.category + " " + cleanText(game.raw && game.raw.author, "")).toLowerCase().indexOf(needle) !== -1;
-    });
-  }
-
-  function normalizeStaticQuasarGame(raw, index, covers) {
-    raw = raw || {};
-    if (cleanText(raw.source, "").toLowerCase() !== "staticquasar") return null;
-    var sourceId = cleanText(raw.slug, "staticquasar-" + index);
-    var launchUrl = safeUrl(raw.file || raw.url);
-    if (!launchUrl) return null;
-    var sourcePath = cleanText(raw.source_path, "");
-    return {
-      id: "staticquasar/" + sourceId,
-      sourceId: sourceId,
-      name: cleanText(raw.name || raw.title, "Untitled game"),
-      category: /^static-gmes\//i.test(sourcePath) ? "Static game" : "Game",
-      provider: "StaticQuasar",
-      image: safeUrl(covers && covers[sourceId]),
-      launchUrl: launchUrl,
-      isStaticQuasar: true,
-      raw: raw
-    };
-  }
-
-  async function loadStaticQuasarCatalog() {
-    var catalogUrl = safeUrl(staticQuasarConfig.catalog);
-    var coversUrl = safeUrl(staticQuasarConfig.covers);
-    if (!catalogUrl || !coversUrl) throw new Error("The StaticQuasar catalog URLs are invalid");
-    var fetcher = window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.fetch === "function"
-      ? window.NEO_PROXY_CLIENT.fetch.bind(window.NEO_PROXY_CLIENT)
-      : window.fetch.bind(window);
-    var responses = await Promise.all([
-      fetcher(catalogUrl, { cache: "no-store", credentials: "omit" }),
-      fetcher(coversUrl, { cache: "no-store", credentials: "omit" })
-    ]);
-    if (!responses[0].ok) throw new Error("StaticQuasar returned " + responses[0].status);
-    if (!responses[1].ok) throw new Error("StaticQuasar covers returned " + responses[1].status);
-    var payloads = await Promise.all([responses[0].json(), responses[1].json()]);
-    var rows = Array.isArray(payloads[0]) ? payloads[0] : Array.isArray(payloads[0] && payloads[0].games) ? payloads[0].games : [];
-    var covers = payloads[1] && typeof payloads[1] === "object" ? payloads[1] : {};
-    var games = rows.map(function (raw, index) { return normalizeStaticQuasarGame(raw, index, covers); }).filter(Boolean);
-    if (!games.length) throw new Error("The StaticQuasar catalog is empty");
-    state.staticQuasarCatalog = games;
-    state.staticQuasarReady = true;
-    state.staticQuasarError = "";
-    games.forEach(function (game) { state.gameMap.set(game.id, game); });
-    return games;
-  }
-
-  function filteredStaticQuasarGames(query) {
-    var needle = cleanText(query, "").toLowerCase();
-    if (!needle) return state.staticQuasarCatalog.slice();
-    return state.staticQuasarCatalog.filter(function (game) {
-      return (game.name + " " + game.category + " " + cleanText(game.raw && game.raw.source_path, "")).toLowerCase().indexOf(needle) !== -1;
-    });
   }
 
   function normalizeLocalGame(raw, index) {
@@ -543,15 +369,9 @@
     if (!game || state.imageUrls.has(game.id)) return;
     try {
       var url = "";
-      if ((game.isAether || game.isGnMath || game.isStaticQuasar) && game.image) {
-        url = window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.image === "function"
-          ? await window.NEO_PROXY_CLIENT.image(game.image)
-          : safeUrl(game.image);
-      } else {
-        if (!game.imageToken || !window.Lumin || typeof window.Lumin.getImageUrl !== "function") return;
-        var result = await window.Lumin.getImageUrl(game.imageToken);
-        url = safeUrl(typeof result === "string" ? result : result && (result.url || result.image_url));
-      }
+      if (!game.imageToken || !window.Lumin || typeof window.Lumin.getImageUrl !== "function") return;
+      var result = await window.Lumin.getImageUrl(game.imageToken);
+      url = safeUrl(typeof result === "string" ? result : result && (result.url || result.image_url));
       url = safeUrl(url);
       if (!url) return;
       state.imageUrls.set(game.id, url);
@@ -587,9 +407,7 @@
     $("[data-about-title]").textContent = game.name + " is ready";
     $("[data-about-copy]").textContent = game.isLocal
       ? "This game was added from your device. Its file, artwork, favorites, recent history, and play time stay in this browser."
-      : game.isAether || game.isGnMath || game.isStaticQuasar
-        ? "Launch this " + game.provider + " title through the NEO web transport. Steam keeps your favorites, recent history, and play time on this device."
-        : "Launch this title directly through the Fern game service. Steam keeps your favorites, recent history, and play time on this device.";
+      : "Launch this title directly through the Fern game service. Steam keeps your favorites, recent history, and play time on this device.";
     $("[data-meta-category]").textContent = category;
     $("[data-meta-id]").textContent = game.id;
     $("[data-game-source]").textContent = game.provider || providerLabel;
@@ -649,22 +467,7 @@
       if (token !== state.requestToken) return;
       var rows = Array.isArray(response && response.games) ? response.games : [];
       var fernGames = rows.map(normalizeGame);
-      var aetherMatches = filteredAetherGames(query);
-      var aetherPages = Math.max(1, Math.ceil(aetherMatches.length / pageSize));
-      var aetherGames = aetherMatches.slice((page - 1) * pageSize, page * pageSize);
-      var gnMathMatches = filteredGnMathGames(query);
-      var gnMathPages = Math.max(1, Math.ceil(gnMathMatches.length / pageSize));
-      var gnMathGames = gnMathMatches.slice((page - 1) * pageSize, page * pageSize);
-      var staticQuasarMatches = filteredStaticQuasarGames(query);
-      var staticQuasarPages = Math.max(1, Math.ceil(staticQuasarMatches.length / pageSize));
-      var staticQuasarGames = staticQuasarMatches.slice((page - 1) * pageSize, page * pageSize);
-      var seenNames = new Set(fernGames.map(function (game) { return game.name.toLowerCase(); }));
-      var games = fernGames.concat(aetherGames.filter(function (game) {
-        var name = game.name.toLowerCase();
-        if (seenNames.has(name)) return false;
-        seenNames.add(name);
-        return true;
-      }), gnMathGames, staticQuasarGames);
+      var games = fernGames;
       games.forEach(function (game) { state.gameMap.set(game.id, game); });
       if (append) {
         var known = new Set(state.games.map(function (game) { return game.id; }));
@@ -676,22 +479,19 @@
       state.page = page;
       state.fernTotal = Number(response && response.total) || (state.fernReady ? fernGames.length : 0);
       state.fernPages = Number(response && response.pages) || Math.max(1, Math.ceil(state.fernTotal / pageSize));
-      state.total = state.fernTotal + aetherMatches.length + gnMathMatches.length + staticQuasarMatches.length;
-      state.pages = Math.max(state.fernReady ? state.fernPages : 1, state.aetherReady ? aetherPages : 1, state.gnMathReady ? gnMathPages : 1, state.staticQuasarReady ? staticQuasarPages : 1);
+      state.total = state.fernTotal;
+      state.pages = state.fernReady ? state.fernPages : 1;
       var combinedTotal = state.total + filteredLocalGames().length;
       $("[data-count]").textContent = combinedTotal.toLocaleString() + " GAMES";
       var sourceParts = [];
       if (state.fernReady) sourceParts.push(state.fernTotal.toLocaleString() + " Fern");
-      if (state.aetherReady) sourceParts.push(state.aetherCatalog.length.toLocaleString() + " Aether");
-      if (state.gnMathReady) sourceParts.push(state.gnMathCatalog.length.toLocaleString() + " GN Math");
-      if (state.staticQuasarReady) sourceParts.push(state.staticQuasarCatalog.length.toLocaleString() + " StaticQuasar");
       if (state.localGames.length) sourceParts.push(state.localGames.length.toLocaleString() + " local");
       setProviderStatus(sourceParts.length ? sourceParts.join(" · ") : "Game catalogs unavailable", sourceParts.length ? "online" : "error");
       if (!state.selected && (state.localGames.length || state.games.length)) selectGame(state.localGames[0] || state.games[0]);
       else renderLists();
       loadImages(games);
-      if (!games.length && !state.localGames.length && !state.aetherReady && !state.gnMathReady && !state.staticQuasarReady && (!state.fernReady || fernError)) {
-        throw fernError || new Error(state.aetherError || state.gnMathError || state.staticQuasarError || state.fernError || "No game catalog could be reached.");
+      if (!games.length && !state.localGames.length && (!state.fernReady || fernError)) {
+        throw fernError || new Error(state.fernError || "The Fern catalog could not be reached.");
       }
     } catch (error) {
       if (token !== state.requestToken) return;
@@ -729,21 +529,6 @@
     }).catch(function (error) {
       state.fernError = cleanText(error && error.message, "Fern could not initialize");
     }).finally(refreshAfterSource);
-    loadAetherCatalog().then(function () {
-      state.ready = true;
-    }).catch(function (error) {
-      state.aetherError = cleanText(error && error.message, "Aether could not initialize");
-    }).finally(refreshAfterSource);
-    loadGnMathCatalog().then(function () {
-      state.ready = true;
-    }).catch(function (error) {
-      state.gnMathError = cleanText(error && error.message, "GN Math could not initialize");
-    }).finally(refreshAfterSource);
-    loadStaticQuasarCatalog().then(function () {
-      state.ready = true;
-    }).catch(function (error) {
-      state.staticQuasarError = cleanText(error && error.message, "StaticQuasar could not initialize");
-    }).finally(refreshAfterSource);
   }
 
   function toggleFavorite() {
@@ -763,14 +548,6 @@
       localPlayerUrl.searchParams.set("name", game.name);
       state.launchUrls.set(game.id, localPlayerUrl.href);
       return localPlayerUrl.href;
-    }
-    if ((game.isAether || game.isGnMath || game.isStaticQuasar) && game.launchUrl) {
-      var proxiedLaunchUrl = window.NEO_PROXY_CLIENT && typeof window.NEO_PROXY_CLIENT.resolve === "function"
-        ? await window.NEO_PROXY_CLIENT.resolve(game.launchUrl, "game")
-        : safeUrl(game.launchUrl);
-      if (!proxiedLaunchUrl) throw new Error(game.provider + " returned an invalid game URL");
-      state.launchUrls.set(game.id, proxiedLaunchUrl);
-      return proxiedLaunchUrl;
     }
     // Snow Rider's legacy Unity player can apply the jump input more than once
     // on high-refresh displays. Run this title through our small compatibility
@@ -833,9 +610,9 @@
           game: {
             id: game.id,
             title: game.name,
-            url: game.isAether || game.isGnMath || game.isStaticQuasar ? game.launchUrl : launchUrl,
+            url: launchUrl,
             icon: state.imageUrls.get(game.id) || "",
-            mode: game.isAether || game.isGnMath || game.isStaticQuasar ? "relay" : "direct-game"
+            mode: "direct-game"
           }
         }, shellOrigin);
         $("[data-game-status]").textContent = "Opening in a separate window…";
@@ -865,7 +642,7 @@
       shortcutButton.textContent = "Add to taskbar";
       $("[data-player]").hidden = false;
       document.documentElement.classList.add("is-playing");
-      showFrameMessage("Launching " + game.name, game.isLocal ? "Opening the saved local game…" : game.isAether || game.isGnMath || game.isStaticQuasar ? "Loading through the NEO web transport…" : "Loading directly from Fern…", false);
+      showFrameMessage("Launching " + game.name, game.isLocal ? "Opening the saved local game…" : "Loading directly from Fern…", false);
       frame.dataset.neoGameSource = launchUrl;
       frame.setAttribute("src", launchUrl);
       frameTimer = window.setTimeout(function () {
@@ -913,7 +690,7 @@
     var frame = $("[data-game-frame]");
     var url = state.activeLaunchUrl;
     resetGameFrame(frame);
-    showFrameMessage("Reloading " + state.activeGame.name, state.activeGame.isLocal ? "Opening the saved local game…" : state.activeGame.isAether || state.activeGame.isGnMath || state.activeGame.isStaticQuasar ? "Loading through the NEO web transport…" : "Loading directly from Fern…", false);
+    showFrameMessage("Reloading " + state.activeGame.name, state.activeGame.isLocal ? "Opening the saved local game…" : "Loading directly from Fern…", false);
     window.setTimeout(function () {
       frame.dataset.neoGameSource = url;
       frame.setAttribute("src", url);
@@ -943,9 +720,9 @@
         id: shortcutRequestId,
         game: {
           title: game.name,
-          url: game.isAether || game.isGnMath || game.isStaticQuasar ? game.launchUrl : launchUrl,
+          url: launchUrl,
           icon: state.imageUrls.get(game.id) || "",
-          mode: game.isAether || game.isGnMath || game.isStaticQuasar ? "relay" : "direct-game"
+          mode: "direct-game"
         }
       }, shellOrigin);
       shortcutTimer = window.setTimeout(function () {

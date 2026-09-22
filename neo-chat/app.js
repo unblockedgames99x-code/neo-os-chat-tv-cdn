@@ -1007,7 +1007,7 @@
   }
 
   async function fileToAttachment(file) {
-    if (file.size > 2.2 * 1024 * 1024) throw new Error("Keep attachments under 2 MB");
+    if (file.type !== "image/gif" && file.size > 2.2 * 1024 * 1024) throw new Error("Keep non-GIF attachments under 2 MB");
     var data = await readFileData(file);
     if (file.type.startsWith("image/") && file.type !== "image/gif") data = await resizeImage(data, 1280, .82);
     return { name: file.name.slice(0, 100), type: file.type || "application/octet-stream", size: file.size, data: data };
@@ -1144,7 +1144,6 @@
     var blob = await fetchGifBlob(result && result.url);
     var type = String(blob.type || "").split(";")[0].toLowerCase();
     if (type !== "image/gif" && type !== "image/webp") throw new Error("That link is not a GIF or animated WebP");
-    if (blob.size > 2.2 * 1024 * 1024) throw new Error("Choose a GIF under 2 MB");
     var data = await readFileData(blob);
     var safeTitle = String(result.title || "GIF").replace(/[\\/:*?"<>|\x00-\x1f]/g, " ").trim().slice(0, 82) || "GIF";
     return { name: safeTitle + (type === "image/gif" ? ".gif" : ".webp"), type: type, size: blob.size, data: data };
