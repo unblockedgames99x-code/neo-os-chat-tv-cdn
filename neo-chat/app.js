@@ -57,7 +57,7 @@
   [
     "app","profileButton","myAvatar","myPresence","myDisplayName","myUsername","composeButton","connectionLabel",
     "searchInput","sidebarContent","requestBadge","emptyState","emptyStartButton","chatView","backButton",
-    "headerPerson","chatAvatar","chatTitle","chatSubtitle","audioCallButton","videoCallButton","infoButton",
+    "headerPerson","chatAvatar","chatTitle","chatSubtitle","infoButton",
     "messageScroll","typingLine","replyStrip","replyLabel","cancelReplyButton","attachmentStrip","attachmentPreview",
     "attachmentName","attachmentSize","cancelAttachmentButton","composer","fileInput","attachButton","attachmentMenu",
     "attachFileButton","attachGifButton","gifPicker","gifCloseButton","gifSearchForm","gifSearchInput","gifProviderTabs",
@@ -889,9 +889,6 @@
     if (channel.kind === "server" && String(channel.name).toLowerCase() === "general") {
       paintGlobalAvatar(el.chatAvatar);
     } else paintAvatar(el.chatAvatar, person || { username: channel.name, displayName: channel.name });
-    var dm = channel.kind === "dm";
-    el.audioCallButton.hidden = !dm;
-    el.videoCallButton.hidden = !dm;
   }
 
   function renderMessages() {
@@ -1581,8 +1578,6 @@
       }
     });
     el.messageScroll.addEventListener("click", handleMessageAction);
-    el.audioCallButton.addEventListener("click", function () { toast("Audio calls need the server's DM calling endpoint."); });
-    el.videoCallButton.addEventListener("click", function () { toast("Video calls need the server's DM calling endpoint."); });
     window.addEventListener("online", function () { setConnection("Live", true); connectSocket(); });
     window.addEventListener("offline", function () { setConnection("Offline", false); });
   }

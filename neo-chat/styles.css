@@ -638,7 +638,7 @@ body {
   min-height: 76px;
   padding: 8px 16px;
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 92px;
+  grid-template-columns: 46px minmax(0, 1fr) 46px;
   gap: 8px;
   border-bottom: 1px solid var(--messages-divider);
   background: color-mix(in srgb, var(--bg) 82%, transparent);
@@ -1113,7 +1113,7 @@ button:focus-visible { outline: 3px solid rgba(var(--accent-rgb),.35); outline-o
 
 @media (max-width: 860px) {
   .app { grid-template-columns: minmax(292px, 42%) minmax(0, 1fr); }
-  .chat-header { grid-template-columns: 46px minmax(0, 1fr) 86px; }
+  .chat-header { grid-template-columns: 46px minmax(0, 1fr) 46px; }
   .message-stack { max-width: 78%; }
   .profile-card .memoji-option-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); }
 }
@@ -1122,7 +1122,7 @@ button:focus-visible { outline: 3px solid rgba(var(--accent-rgb),.35); outline-o
   .app { display: block; }
   .sidebar-title h1 { font-size: 28px; }
   .conversation-row, .person-row, .request-row { margin-inline: 6px; width: calc(100% - 12px); }
-  .chat-header { grid-template-columns: 42px minmax(0, 1fr) 78px; padding-inline: 8px; }
+  .chat-header { grid-template-columns: 42px minmax(0, 1fr) 42px; padding-inline: 8px; }
   .header-actions { gap: 1px; }
   .header-actions .icon-button { width: 34px; height: 34px; }
   .message-scroll { padding-inline: 10px; }
